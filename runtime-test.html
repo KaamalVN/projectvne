@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ProjectVNE Runtime Test</title>
+    <style>
+        body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #1099bb; }
+        #game-container { width: 800px; height: 600px; background-color: #ccc; }
+    </style>
+</head>
+<body>
+    <div id="game-container"></div>
+    <script type="module">
+        import * as PIXI from 'https://cdn.jsdelivr.net/npm/pixi.js@8.0.0/dist/browser/pixi.mjs';
+
+        // Simple test to verify PixiJS is working
+        const app = new PIXI.Application({
+            width: 800,
+            height: 600,
+            backgroundColor: 0x1099bb
+        });
+
+        document.getElementById('game-container').appendChild(app.view);
+
+        // Add a simple text to verify it's working
+        const text = new PIXI.Text({ text: 'PixiJS is working!', style: { fontSize: 24, fill: 0xffffff } });
+        text.x = 400;
+        text.y = 300;
+        text.anchor.set(0.5);
+        app.stage.addChild(text);
+
+        console.log('PixiJS runtime test successful');
+    </script>
+</body>
+</html>

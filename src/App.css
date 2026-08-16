@@ -1,116 +1,185 @@
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
-}
+@import "tailwindcss";
+@import "@xyflow/react/dist/style.css";
 
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafb);
-}
-:root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 400;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
-  color: #0f0f0f;
-  background-color: #f6f6f6;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
-}
-
-.container {
+html, body, #root {
+  width: 100%;
+  height: 100%;
   margin: 0;
-  padding-top: 10vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  text-align: center;
+  padding: 0;
+  background-color: #0b0f17;
+  color: #e2e8f0;
+  overflow: hidden;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
+/* ===================================
+   REACT FLOW — DARK GRAPH THEME
+=================================== */
+
+/* Canvas Background */
+.react-flow__background {
+  background-color: #090d16 !important;
 }
 
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
+/* Edge / Wire Paths */
+.react-flow__edge-path {
+  stroke-width: 2px !important;
+  filter: drop-shadow(0 0 3px rgba(148, 163, 184, 0.15));
 }
 
-.row {
-  display: flex;
-  justify-content: center;
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: #a78bfa !important;
+  stroke-width: 2.5px !important;
+  filter: drop-shadow(0 0 6px rgba(167, 139, 250, 0.4));
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
+/* Edge label */
+.react-flow__edge-text {
+  fill: #94a3b8 !important;
+  font-size: 10px !important;
+  font-family: 'JetBrains Mono', monospace !important;
 }
 
-a:hover {
-  color: #535bf2;
+/* Connection Line (while drawing a new edge) */
+.react-flow__connection-path {
+  stroke: #a78bfa !important;
+  stroke-width: 2px !important;
+  stroke-dasharray: 5, 3;
+  animation: dash 0.5s linear infinite;
 }
 
-h1 {
-  text-align: center;
+@keyframes dash {
+  to { stroke-dashoffset: -8; }
 }
 
-input,
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  color: #0f0f0f;
-  background-color: #ffffff;
-  transition: border-color 0.25s;
-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
+/* Node Handles */
+.react-flow__handle {
+  width: 11px !important;
+  height: 11px !important;
+  border-radius: 50% !important;
+  border: 2px solid #0f172a !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  cursor: crosshair !important;
 }
 
-button {
+.react-flow__handle:hover {
+  transform: scale(1.5) !important;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.react-flow__handle-source {
+  background: #94a3b8 !important;
+}
+
+.react-flow__handle-target {
+  background: #64748b !important;
+}
+
+/* Selected Node Outline */
+.react-flow__node.selected > div,
+.react-flow__node:focus > div {
+  box-shadow: 0 0 0 2px #a78bfa, 0 0 20px rgba(167, 139, 250, 0.2) !important;
+}
+
+/* React Flow Controls */
+.react-flow__controls {
+  background: #0f172a !important;
+  border: 1px solid #1e293b !important;
+  border-radius: 10px !important;
+  overflow: hidden !important;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4) !important;
+}
+
+.react-flow__controls-button {
+  background: #0f172a !important;
+  border-bottom: 1px solid #1e293b !important;
+  fill: #94a3b8 !important;
+  transition: background 0.15s, fill 0.15s;
+}
+
+.react-flow__controls-button:hover {
+  background: #1e293b !important;
+  fill: #e2e8f0 !important;
+}
+
+.react-flow__controls-button:last-child {
+  border-bottom: none !important;
+}
+
+/* React Flow MiniMap */
+.react-flow__minimap {
+  background: #0f172a !important;
+  border: 1px solid #1e293b !important;
+  border-radius: 10px !important;
+  overflow: hidden !important;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5) !important;
+}
+
+.react-flow__minimap-mask {
+  fill: rgba(9, 13, 22, 0.7) !important;
+}
+
+/* Pane selection box */
+.react-flow__selection {
+  background: rgba(167, 139, 250, 0.05) !important;
+  border: 1px solid rgba(167, 139, 250, 0.4) !important;
+  border-radius: 4px !important;
+}
+
+/* Node panel wrapper (no default white bg) */
+.react-flow__node {
+  cursor: pointer !important;
+}
+
+/* ===================================
+   CUSTOM SCROLLBARS
+=================================== */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* ===================================
+   CUSTOM CHECKBOX ACCENT
+=================================== */
+input[type="checkbox"] {
+  accent-color: #7c3aed;
   cursor: pointer;
 }
 
-button:hover {
-  border-color: #396cd8;
-}
-button:active {
-  border-color: #396cd8;
-  background-color: #e8e8e8;
-}
-
-input,
-button {
-  outline: none;
+/* ===================================
+   MODAL ANIMATIONS
+=================================== */
+@keyframes modal-in {
+  from { opacity: 0; transform: scale(0.95) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
 }
 
-#greet-input {
-  margin-right: 5px;
+.modal-content {
+  animation: modal-in 0.15s ease-out;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
-  }
-
-  a:hover {
-    color: #24c8db;
-  }
-
-  input,
-  button {
-    color: #ffffff;
-    background-color: #0f0f0f98;
-  }
-  button:active {
-    background-color: #0f0f0f69;
-  }
+/* ===================================
+   STATUS BAR PULSE
+=================================== */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
 }

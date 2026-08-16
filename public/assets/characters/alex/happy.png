@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 600" width="400" height="600">
+  <defs>
+    <linearGradient id="hairGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#dd6b20" />
+      <stop offset="100%" stop-color="#9c4221" />
+    </linearGradient>
+    <linearGradient id="jacketGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#3182ce" />
+      <stop offset="100%" stop-color="#2b6cb0" />
+    </linearGradient>
+    <linearGradient id="skinGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#feebc8" />
+      <stop offset="100%" stop-color="#fbd38d" />
+    </linearGradient>
+  </defs>
+
+  <!-- Body / Clothes -->
+  <!-- Shoulders & Jacket -->
+  <path d="M 120 400 Q 200 370 280 400 L 330 600 L 70 600 Z" fill="url(#jacketGrad)" stroke="#1a365d" stroke-width="4" />
+  
+  <!-- Shirt Collar -->
+  <polygon points="200,410 160,370 240,370" fill="#edf2f7" stroke="#cbd5e0" stroke-width="2" />
+  <polygon points="175,370 200,430 190,430" fill="#e2e8f0" />
+  <polygon points="225,370 200,430 210,430" fill="#e2e8f0" />
+
+  <!-- Neck -->
+  <rect x="175" y="320" width="50" height="70" rx="8" fill="url(#skinGrad)" stroke="#dd6b20" stroke-width="1.5" />
+
+  <!-- Head Base -->
+  <ellipse cx="200" cy="270" rx="65" ry="75" fill="url(#skinGrad)" stroke="#dd6b20" stroke-width="2" />
+
+  <!-- Hair Back -->
+  <path d="M 115 260 Q 90 360 140 380 Q 200 400 260 380 Q 310 360 285 260 Z" fill="url(#hairGrad)" />
+
+  <!-- Ears -->
+  <ellipse cx="132" cy="275" rx="10" ry="16" fill="url(#skinGrad)" />
+  <ellipse cx="268" cy="275" rx="10" ry="16" fill="url(#skinGrad)" />
+
+  <!-- Hair Top & Bangs -->
+  <path d="M 130 250 C 130 160 270 160 270 250 C 275 220 250 190 200 185 C 150 190 125 220 130 250 Z" fill="url(#hairGrad)" stroke="#7b341e" stroke-width="2" />
+  <path d="M 135 220 Q 170 260 180 230 Q 200 270 220 230 Q 240 260 265 225 C 240 180 160 180 135 220 Z" fill="url(#hairGrad)" />
+
+  <!-- Happy Eyebrows -->
+  <path d="M 155 240 Q 175 230 185 242" fill="none" stroke="#7b341e" stroke-width="4" stroke-linecap="round" />
+  <path d="M 215 242 Q 225 230 245 240" fill="none" stroke="#7b341e" stroke-width="4" stroke-linecap="round" />
+
+  <!-- Happy Eyes (curved smile eyes) -->
+  <path d="M 155 265 Q 172 248 188 265" fill="none" stroke="#2d3748" stroke-width="4.5" stroke-linecap="round" />
+  <path d="M 212 265 Q 228 248 245 265" fill="none" stroke="#2d3748" stroke-width="4.5" stroke-linecap="round" />
+
+  <!-- Blush -->
+  <ellipse cx="155" cy="285" rx="14" ry="7" fill="#feb2b2" opacity="0.6" />
+  <ellipse cx="245" cy="285" rx="14" ry="7" fill="#feb2b2" opacity="0.6" />
+
+  <!-- Nose -->
+  <path d="M 197 275 Q 200 282 203 282" fill="none" stroke="#dd6b20" stroke-width="2.5" stroke-linecap="round" />
+
+  <!-- Happy Smile Mouth -->
+  <path d="M 180 298 Q 200 322 220 298 Q 200 305 180 298 Z" fill="#e53e3e" stroke="#9b2c2c" stroke-width="2" />
+  <path d="M 185 301 Q 200 307 215 301" fill="#fff" />
+</svg>

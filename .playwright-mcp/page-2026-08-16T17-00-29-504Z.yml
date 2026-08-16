@@ -1,0 +1,17 @@
+- main [ref=e3]:
+  - heading "Welcome to Tauri + React" [level=1] [ref=e4]
+  - generic [ref=e5]:
+    - link [ref=e6] [cursor=pointer]:
+      - /url: https://vite.dev
+      - img "Vite logo" [ref=e7]
+    - link [ref=e8] [cursor=pointer]:
+      - /url: https://tauri.app
+      - img "Tauri logo" [ref=e9]
+    - link [ref=e10] [cursor=pointer]:
+      - /url: https://react.dev
+      - img "React logo" [ref=e11]
+  - paragraph [ref=e12]: Click on the Tauri, Vite, and React logos to learn more.
+  - generic [ref=e13]:
+    - textbox "Enter a name..." [ref=e14]
+    - button "Greet" [ref=e15]
+  - paragraph
