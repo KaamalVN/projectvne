@@ -1,10 +1,10 @@
 import * as PIXI from 'pixi.js';
-import { ProjectIR, ID, StoryBlock, DialogueBlock, ShowCharacterBlock, ChoiceBlock, SetVariableBlock } from '../shared/types';
+import { ProjectIR, ID, StoryBlock, DialogueBlock, ShowCharacterBlock, ChoiceBlock, SetVariableBlock, VariableValue } from '../shared/types';
 
 export interface EngineState {
   currentSceneId: ID | null;
   currentBlockIndex: number;
-  variables: Record<string, number | boolean | string>;
+  variables: Record<string, VariableValue>;
   isWaitingForInput: boolean;
   isShowingChoices: boolean;
   history: string[];
@@ -79,7 +79,7 @@ export class PixiVisualNovelEngine {
     await this.app.init({
       width: 800,
       height: 600,
-      backgroundColor: 0x111827,
+      backgroundColor: 0x141418,
       resolution: window.devicePixelRatio || 1,
       autoDensity: true,
       antialias: true
@@ -122,18 +122,18 @@ export class PixiVisualNovelEngine {
     this.dialogueBox = new PIXI.Container();
     this.dialogueBox.position.set(20, 420);
 
-    // Main Box Background (Glassmorphism dark look)
+    // Main Box Background — neutral charcoal, no blue tint
     this.dialogueBg = new PIXI.Graphics();
     this.dialogueBg.roundRect(0, 0, 760, 160, 12);
-    this.dialogueBg.fill({ color: 0x0f172a, alpha: 0.88 });
-    this.dialogueBg.stroke({ width: 2, color: 0x3b82f6, alpha: 0.7 });
+    this.dialogueBg.fill({ color: 0x1a1a1f, alpha: 0.92 });
+    this.dialogueBg.stroke({ width: 1.5, color: 0x2e2e38, alpha: 0.8 });
     this.dialogueBox.addChild(this.dialogueBg);
 
-    // Speaker Name Tag Box
+    // Speaker Name Tag Box — subtle dark surface
     this.nameBadgeBg = new PIXI.Graphics();
     this.nameBadgeBg.roundRect(16, -18, 180, 36, 8);
-    this.nameBadgeBg.fill({ color: 0x1e3a8a, alpha: 0.95 });
-    this.nameBadgeBg.stroke({ width: 1.5, color: 0x60a5fa, alpha: 0.9 });
+    this.nameBadgeBg.fill({ color: 0x222228, alpha: 0.95 });
+    this.nameBadgeBg.stroke({ width: 1, color: 0x3a3a46, alpha: 0.8 });
     this.dialogueBox.addChild(this.nameBadgeBg);
 
     // Speaker Name Text
@@ -143,7 +143,7 @@ export class PixiVisualNovelEngine {
         fontFamily: 'system-ui, -apple-system, sans-serif',
         fontSize: 16,
         fontWeight: 'bold',
-        fill: 0xf8fafc,
+        fill: 0xe4e4e8,
       }
     });
     this.nameText.position.set(28, -10);
@@ -155,7 +155,7 @@ export class PixiVisualNovelEngine {
       style: {
         fontFamily: 'system-ui, -apple-system, sans-serif',
         fontSize: 18,
-        fill: 0xf1f5f9,
+        fill: 0xd4d4d8,
         wordWrap: true,
         wordWrapWidth: 720,
         lineHeight: 28
@@ -170,7 +170,7 @@ export class PixiVisualNovelEngine {
       style: {
         fontFamily: 'system-ui, -apple-system, sans-serif',
         fontSize: 12,
-        fill: 0x93c5fd,
+        fill: 0x6b7280,
       }
     });
     this.continuePrompt.position.set(620, 130);
@@ -242,7 +242,7 @@ export class PixiVisualNovelEngine {
     if (!assetId || !this.story?.assets[assetId]) {
       // Default gradient / fallback background
       this.bgGraphics.rect(0, 0, 800, 600);
-      this.bgGraphics.fill({ color: 0x1e293b });
+      this.bgGraphics.fill({ color: 0x1a1a1f });
       return;
     }
 
@@ -258,7 +258,7 @@ export class PixiVisualNovelEngine {
     } catch (err) {
       console.warn(`Could not load background image ${assetUrl}, using fallback`, err);
       this.bgGraphics.rect(0, 0, 800, 600);
-      this.bgGraphics.fill({ color: 0x1e293b });
+      this.bgGraphics.fill({ color: 0x1a1a1f });
     }
   }
 
@@ -370,7 +370,7 @@ export class PixiVisualNovelEngine {
 
   private handleSetVariable(block: SetVariableBlock) {
     const current = this.state.variables[block.variableId] ?? 0;
-    let nextValue: number | boolean | string = block.value;
+    let nextValue: VariableValue = block.value;
 
     if (typeof current === 'number' && typeof block.value === 'number') {
       if (block.operation === 'add') nextValue = current + block.value;
@@ -473,8 +473,8 @@ export class PixiVisualNovelEngine {
       const drawBg = (isHover: boolean) => {
         btnBg.clear();
         btnBg.roundRect(0, 0, 560, 48, 8);
-        btnBg.fill({ color: isHover ? 0x2563eb : 0x1e293b, alpha: 0.95 });
-        btnBg.stroke({ width: 2, color: isHover ? 0x93c5fd : 0x475569, alpha: 0.9 });
+        btnBg.fill({ color: isHover ? 0x28282e : 0x1e1e24, alpha: 0.95 });
+        btnBg.stroke({ width: 1.5, color: isHover ? 0x4a4a58 : 0x2e2e38, alpha: 0.9 });
       };
 
       drawBg(false);

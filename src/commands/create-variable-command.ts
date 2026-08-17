@@ -7,6 +7,10 @@ export interface CreateVariablePayload {
   defaultValue: VariableValue;
   displayName: string;
   description?: string;
+  minValue?: number;
+  maxValue?: number;
+  allowedTags?: string[];
+  inventoryItems?: Record<string, number>;
 }
 
 export class CreateVariableCommand extends IRCommand<CreateVariablePayload> {
@@ -24,7 +28,11 @@ export class CreateVariableCommand extends IRCommand<CreateVariablePayload> {
       type: this.payload.type,
       defaultValue: this.payload.defaultValue,
       displayName: this.payload.displayName,
-      description: this.payload.description
+      description: this.payload.description,
+      minValue: this.payload.minValue,
+      maxValue: this.payload.maxValue,
+      allowedTags: this.payload.allowedTags,
+      inventoryItems: this.payload.inventoryItems
     };
 
     return {

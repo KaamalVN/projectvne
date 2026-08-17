@@ -3,13 +3,179 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
+/* ===================================
+   THEME: DARK (default)
+=================================== */
+:root {
+  /* Base backgrounds — layered charcoal, near-black but not pitch */
+  --bg-app: #0e0e12;
+  --bg-panel: #131318;
+  --bg-surface: #17171c;
+  --bg-card: #1a1a20;
+  --bg-elevated: #202027;
+  --bg-input: #0f0f14;
+  --bg-hover: #222229;
+
+  /* Borders */
+  --border-subtle: #20202a;
+  --border-default: #282834;
+  --border-strong: #343442;
+  --border-focus: #454556;
+
+  /* Text — soft off-white, strong but never pure white */
+  --text-primary: #ececf1;
+  --text-secondary: #b8b8c2;
+  --text-muted: #8f8f9a;
+  --text-ghost: #6d6d7a;
+  --text-faint: #565663;
+
+  /* Semantic: Green (Start / End) */
+  --green-dim: #14332a;
+  --green-subtle: #1a4d3a;
+  --green-bg: #166534;
+  --green-text: #4ade80;
+  --green-border: #22633e;
+
+  /* Semantic: Amber (Choice) */
+  --amber-dim: #2d2215;
+  --amber-subtle: #3d2e18;
+  --amber-bg: #713f12;
+  --amber-text: #fbbf24;
+  --amber-border: #7a5a1c;
+
+  /* Semantic: Blue (Dialogue) */
+  --blue-dim: #131e2e;
+  --blue-subtle: #1a2a40;
+  --blue-bg: #1e3a5f;
+  --blue-text: #60a5fa;
+  --blue-border: #2a4a6e;
+
+  /* Semantic: Violet (Character) */
+  --violet-dim: #1c1530;
+  --violet-subtle: #261d42;
+  --violet-bg: #3b1f6e;
+  --violet-text: #a78bfa;
+  --violet-border: #4a2d7a;
+
+  /* Semantic: Teal (Background) */
+  --teal-dim: #0f2925;
+  --teal-subtle: #153a34;
+  --teal-bg: #134e4a;
+  --teal-text: #2dd4bf;
+  --teal-border: #1a5c54;
+
+  /* Status */
+  --error-text: #f87171;
+  --error-bg: #2d1515;
+  --error-border: #5c2525;
+  --success-text: #4ade80;
+  --warning-text: #fbbf24;
+
+  /* Canvas */
+  --canvas-bg: #0b0b0f;
+  --canvas-dot: #2e2e38;
+
+  /* Force React Flow's own background mechanism to follow our theme */
+  --xy-background-color: var(--canvas-bg);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.35);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.4);
+  --shadow-xl: 0 12px 40px rgba(0,0,0,0.5);
+
+  /* Accent */
+  --accent: #2dd4bf;
+  --accent-hover: #5eead4;
+
+  color-scheme: dark;
+}
+
+/* ===================================
+   THEME: LIGHT
+=================================== */
+.light, [data-theme="light"] {
+  --bg-app: #f3f2ee;
+  --bg-panel: #fbfaf7;
+  --bg-surface: #f7f5f1;
+  --bg-card: #efede8;
+  --bg-elevated: #ffffff;
+  --bg-input: #eae8e2;
+  --bg-hover: #e5e2db;
+
+  --border-subtle: #dedcd5;
+  --border-default: #cfccc4;
+  --border-strong: #b6b3aa;
+  --border-focus: #8d8a82;
+
+  --text-primary: #1c1b1a;
+  --text-secondary: #44433f;
+  --text-muted: #6c6a66;
+  --text-ghost: #8f8d88;
+  --text-faint: #aaa9a3;
+
+  --green-dim: #dcfce7;
+  --green-subtle: #bbf7d0;
+  --green-bg: #22c55e;
+  --green-text: #166534;
+  --green-border: #86efac;
+
+  --amber-dim: #fef3c7;
+  --amber-subtle: #fde68a;
+  --amber-bg: #f59e0b;
+  --amber-text: #78350f;
+  --amber-border: #fcd34d;
+
+  --blue-dim: #dbeafe;
+  --blue-subtle: #bfdbfe;
+  --blue-bg: #3b82f6;
+  --blue-text: #1e3a5f;
+  --blue-border: #93c5fd;
+
+  --violet-dim: #ede9fe;
+  --violet-subtle: #ddd6fe;
+  --violet-bg: #8b5cf6;
+  --violet-text: #3b1f6e;
+  --violet-border: #c4b5fd;
+
+  --teal-dim: #ccfbf1;
+  --teal-subtle: #99f6e4;
+  --teal-bg: #14b8a6;
+  --teal-text: #134e4a;
+  --teal-border: #5eead4;
+
+  --error-text: #dc2626;
+  --error-bg: #fef2f2;
+  --error-border: #fca5a5;
+  --success-text: #16a34a;
+  --warning-text: #d97706;
+
+  --canvas-bg: #e8e6e1;
+  --canvas-dot: #cfccc4;
+
+  --xy-background-color: var(--canvas-bg);
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.1);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+  --shadow-xl: 0 12px 40px rgba(0,0,0,0.15);
+
+  --accent: #0d9488;
+  --accent-hover: #0f766e;
+
+  color-scheme: light;
+}
+
+/* ===================================
+   BASE RESET
+=================================== */
 html, body, #root {
   width: 100%;
   height: 100%;
   margin: 0;
   padding: 0;
-  background-color: #0b0f17;
-  color: #e2e8f0;
+  background-color: var(--bg-app);
+  color: var(--text-primary);
   overflow: hidden;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   user-select: none;
@@ -17,36 +183,40 @@ html, body, #root {
 }
 
 /* ===================================
-   REACT FLOW — DARK GRAPH THEME
+   REACT FLOW — THEME-OVERRIDDEN
 =================================== */
 
-/* Canvas Background */
+/* Canvas Background — drive via React Flow's own variable so dark/light follow theme */
+.react-flow {
+  background-color: var(--xy-background-color) !important;
+}
+
 .react-flow__background {
-  background-color: #090d16 !important;
+  background-color: transparent !important;
 }
 
 /* Edge / Wire Paths */
 .react-flow__edge-path {
   stroke-width: 2px !important;
-  filter: drop-shadow(0 0 3px rgba(148, 163, 184, 0.15));
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.08));
 }
 
 .react-flow__edge.selected .react-flow__edge-path {
-  stroke: #a78bfa !important;
+  stroke: var(--accent) !important;
   stroke-width: 2.5px !important;
-  filter: drop-shadow(0 0 6px rgba(167, 139, 250, 0.4));
+  filter: drop-shadow(0 0 6px rgba(45, 212, 191, 0.2));
 }
 
 /* Edge label */
 .react-flow__edge-text {
-  fill: #94a3b8 !important;
+  fill: var(--text-secondary) !important;
   font-size: 10px !important;
   font-family: 'JetBrains Mono', monospace !important;
 }
 
-/* Connection Line (while drawing a new edge) */
+/* Connection Line */
 .react-flow__connection-path {
-  stroke: #a78bfa !important;
+  stroke: var(--accent) !important;
   stroke-width: 2px !important;
   stroke-dasharray: 5, 3;
   animation: dash 0.5s linear infinite;
@@ -61,7 +231,7 @@ html, body, #root {
   width: 11px !important;
   height: 11px !important;
   border-radius: 50% !important;
-  border: 2px solid #0f172a !important;
+  border: 2px solid var(--canvas-bg) !important;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
   cursor: crosshair !important;
 }
@@ -72,67 +242,87 @@ html, body, #root {
 }
 
 .react-flow__handle-source {
-  background: #94a3b8 !important;
+  background: var(--text-secondary) !important;
 }
 
 .react-flow__handle-target {
-  background: #64748b !important;
+  background: var(--text-muted) !important;
 }
 
 /* Selected Node Outline */
 .react-flow__node.selected > div,
 .react-flow__node:focus > div {
-  box-shadow: 0 0 0 2px #a78bfa, 0 0 20px rgba(167, 139, 250, 0.2) !important;
+  box-shadow: 0 0 0 2px var(--accent), 0 0 16px rgba(45, 212, 191, 0.12) !important;
 }
 
 /* React Flow Controls */
 .react-flow__controls {
-  background: #0f172a !important;
-  border: 1px solid #1e293b !important;
-  border-radius: 10px !important;
+  background: var(--bg-panel) !important;
+  border: 1px solid var(--border-default) !important;
+  border-radius: 8px !important;
   overflow: hidden !important;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.4) !important;
+  box-shadow: var(--shadow-md) !important;
 }
 
 .react-flow__controls-button {
-  background: #0f172a !important;
-  border-bottom: 1px solid #1e293b !important;
-  fill: #94a3b8 !important;
+  background: var(--bg-panel) !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+  fill: var(--text-secondary) !important;
+  width: 28px !important;
+  height: 28px !important;
   transition: background 0.15s, fill 0.15s;
 }
 
 .react-flow__controls-button:hover {
-  background: #1e293b !important;
-  fill: #e2e8f0 !important;
+  background: var(--bg-hover) !important;
+  fill: var(--text-primary) !important;
 }
 
 .react-flow__controls-button:last-child {
   border-bottom: none !important;
 }
 
-/* React Flow MiniMap */
-.react-flow__minimap {
-  background: #0f172a !important;
-  border: 1px solid #1e293b !important;
-  border-radius: 10px !important;
-  overflow: hidden !important;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.5) !important;
+.react-flow__controls-button svg {
+  max-width: 14px !important;
+  max-height: 14px !important;
+  fill: inherit !important;
 }
 
-.react-flow__minimap-mask {
-  fill: rgba(9, 13, 22, 0.7) !important;
+/* Custom live MiniMap (nodes + edges + viewport) */
+.graph-minimap {
+  cursor: pointer;
+}
+
+.graph-minimap svg {
+  display: block;
+}
+
+.graph-minimap .mm-viewport {
+  fill: rgba(45, 212, 191, 0.12);
+  stroke: var(--accent);
+  stroke-width: 1;
+  transition: none;
+}
+
+.graph-minimap .mm-node {
+  transition: none;
 }
 
 /* Pane selection box */
 .react-flow__selection {
-  background: rgba(167, 139, 250, 0.05) !important;
-  border: 1px solid rgba(167, 139, 250, 0.4) !important;
+  background: rgba(45, 212, 191, 0.04) !important;
+  border: 1px solid rgba(45, 212, 191, 0.3) !important;
   border-radius: 4px !important;
 }
 
-/* Node panel wrapper (no default white bg) */
+/* Node panel wrapper */
 .react-flow__node {
   cursor: pointer !important;
+}
+
+/* Attribution */
+.react-flow__attribution {
+  display: none !important;
 }
 
 /* ===================================
@@ -148,19 +338,19 @@ html, body, #root {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: var(--border-default);
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: var(--border-strong);
 }
 
 /* ===================================
    CUSTOM CHECKBOX ACCENT
 =================================== */
 input[type="checkbox"] {
-  accent-color: #7c3aed;
+  accent-color: var(--accent);
   cursor: pointer;
 }
 
@@ -168,12 +358,12 @@ input[type="checkbox"] {
    MODAL ANIMATIONS
 =================================== */
 @keyframes modal-in {
-  from { opacity: 0; transform: scale(0.95) translateY(8px); }
+  from { opacity: 0; transform: scale(0.96) translateY(6px); }
   to   { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 .modal-content {
-  animation: modal-in 0.15s ease-out;
+  animation: modal-in 0.18s ease-out;
 }
 
 /* ===================================
@@ -182,4 +372,27 @@ input[type="checkbox"] {
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.4; }
+}
+
+/* ===================================
+   THEME TOGGLE BUTTON
+=================================== */
+.theme-toggle {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 13px;
+}
+.theme-toggle:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border-color: var(--border-default);
 }

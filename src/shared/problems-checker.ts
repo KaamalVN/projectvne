@@ -139,6 +139,19 @@ export class ProblemsChecker {
               message: `Variable action in "${scene.title}" references missing variable '${block.variableId}'.`,
               fixSuggestion: `Create variable '${block.variableId}' in Variables panel.`
             });
+          } else {
+            // Validate that the operation matches the variable type
+            const variable = project.variables[block.variableId];
+            if (variable.type === 'tagCollection' && block.operation !== 'set') {
+              problems.push({
+                id: `invalid-tag-operation-${sceneId}-${block.id}`,
+                severity: 'warning',
+                sceneId,
+                blockId: block.id,
+                message: `Tag collection variables only support 'set' operations.`,
+                fixSuggestion: `Change operation to 'set' or use a different variable type.`
+              });
+            }
           }
         }
       });

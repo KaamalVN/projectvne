@@ -57,10 +57,15 @@ export interface Variable extends IRObject {
   defaultValue: VariableValue;
   displayName: string;
   description?: string;
+  // Extended properties for advanced types
+  minValue?: number; // for counter/relationship
+  maxValue?: number; // for counter/relationship
+  allowedTags?: string[]; // for tag/collection
+  inventoryItems?: Record<string, number>; // for inventory (item -> count)
 }
 
-export type VariableType = 'number' | 'boolean' | 'text' | 'relationship' | 'inventory' | 'counter';
-export type VariableValue = number | boolean | string;
+export type VariableType = 'number' | 'boolean' | 'text' | 'relationship' | 'inventory' | 'counter' | 'tagCollection';
+export type VariableValue = number | boolean | string | string[] | Record<string, number>;
 
 // Scene definition
 export interface Scene extends IRObject {

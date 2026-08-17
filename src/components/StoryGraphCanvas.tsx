@@ -3,7 +3,6 @@ import {
   ReactFlow,
   Background,
   Controls,
-  MiniMap,
   Node,
   Edge,
   BackgroundVariant
@@ -17,6 +16,7 @@ import {
   ChoiceNode,
   StoryNodeData
 } from './GraphNodes';
+import { GraphMiniMap } from './GraphMiniMap';
 import { ProjectIR, ID, StoryBlock, DialogueBlock, ShowCharacterBlock, ChoiceBlock } from '../shared/types';
 
 const nodeTypes = {
@@ -31,12 +31,14 @@ const nodeTypes = {
 interface StoryGraphCanvasProps {
   project: ProjectIR;
   activeSceneId: ID | null;
+  theme: "dark" | "light";
   onSelectNode?: (nodeId: string, nodeType: string, blockData?: any) => void;
 }
 
 export const StoryGraphCanvas: React.FC<StoryGraphCanvasProps> = ({
   project,
   activeSceneId,
+  theme,
   onSelectNode
 }) => {
   const { nodes, edges } = useMemo(() => {
@@ -59,6 +61,8 @@ export const StoryGraphCanvas: React.FC<StoryGraphCanvasProps> = ({
       id: startNodeId,
       type: 'startNode',
       position: { x: currentX, y: currentY },
+      width: 192,
+      height: 68,
       data: {
         id: startNodeId,
         type: 'start',
@@ -79,6 +83,8 @@ export const StoryGraphCanvas: React.FC<StoryGraphCanvasProps> = ({
         id: bgNodeId,
         type: 'showBackgroundNode',
         position: { x: currentX, y: currentY - 40 },
+        width: 240,
+        height: 98,
         data: {
           id: bgNodeId,
           type: 'showBackground',
@@ -95,7 +101,7 @@ export const StoryGraphCanvas: React.FC<StoryGraphCanvasProps> = ({
         target: bgNodeId,
         targetHandle: 'in',
         animated: true,
-        style: { stroke: '#3b82f6', strokeWidth: 2 }
+        style: { stroke: '#6b7280', strokeWidth: 2 }
       });
 
       prevNodeId = bgNodeId;
@@ -117,6 +123,8 @@ export const StoryGraphCanvas: React.FC<StoryGraphCanvasProps> = ({
           id: nodeId,
           type: 'showCharacterNode',
           position: { x: currentX, y: currentY - 50 },
+          width: 240,
+          height: 106,
           data: {
             id: nodeId,
             type: 'showCharacter',
@@ -136,7 +144,7 @@ export const StoryGraphCanvas: React.FC<StoryGraphCanvasProps> = ({
           target: nodeId,
           targetHandle: 'in',
           animated: false,
-          style: { stroke: '#38bdf8', strokeWidth: 2 }
+          style: { stroke: '#6b7280', strokeWidth: 2 }
         });
 
         prevNodeId = nodeId;
@@ -150,6 +158,8 @@ export const StoryGraphCanvas: React.FC<StoryGraphCanvasProps> = ({
           id: nodeId,
           type: 'dialogueNode',
           position: { x: currentX, y: currentY },
+          width: 272,
+          height: 120,
           data: {
             id: nodeId,
             type: 'dialogue',
@@ -168,7 +178,7 @@ export const StoryGraphCanvas: React.FC<StoryGraphCanvasProps> = ({
           target: nodeId,
           targetHandle: 'in',
           animated: false,
-          style: { stroke: '#c084fc', strokeWidth: 2 }
+          style: { stroke: '#6b7280', strokeWidth: 2 }
         });
 
         prevNodeId = nodeId;
@@ -181,6 +191,8 @@ export const StoryGraphCanvas: React.FC<StoryGraphCanvasProps> = ({
           id: nodeId,
           type: 'choiceNode',
           position: { x: currentX, y: currentY - 20 },
+          width: 296,
+          height: 158,
           data: {
             id: nodeId,
             type: 'choice',
@@ -201,14 +213,13 @@ export const StoryGraphCanvas: React.FC<StoryGraphCanvasProps> = ({
           style: { stroke: '#fbbf24', strokeWidth: 2 }
         });
 
-        // Branching out choices to branch outcome dialogue nodes or destination scenes
+        // Branching out choices
         const branchX = currentX + spacingX + 40;
         choiceBlock.options.forEach((opt, optIdx) => {
           const optTargetScene = opt.destinationSceneId ? project.scenes[opt.destinationSceneId] : null;
           const optOutcomeNodeId = `outcome-${nodeId}-${optIdx}`;
 
           if (optTargetScene) {
-            // Destination Scene Node
             const targetDlg = optTargetScene.blocks.find(b => b.type === 'dialogue') as DialogueBlock | undefined;
             const targetChar = targetDlg?.characterId ? project.characters[targetDlg.characterId] : null;
 
@@ -216,6 +227,8 @@ export const StoryGraphCanvas: React.FC<StoryGraphCanvasProps> = ({
               id: optOutcomeNodeId,
               type: 'dialogueNode',
               position: { x: branchX, y: currentY - 80 + optIdx * spacingY },
+              width: 272,
+              height: 120,
               data: {
                 id: optOutcomeNodeId,
                 type: 'dialogue',
@@ -236,12 +249,13 @@ export const StoryGraphCanvas: React.FC<StoryGraphCanvasProps> = ({
               style: { stroke: '#fbbf24', strokeWidth: 2 }
             });
 
-            // End node after outcome
             const branchEndNodeId = `end-${optOutcomeNodeId}`;
             generatedNodes.push({
               id: branchEndNodeId,
               type: 'endNode',
               position: { x: branchX + 340, y: currentY - 50 + optIdx * spacingY },
+              width: 176,
+              height: 68,
               data: {
                 id: branchEndNodeId,
                 type: 'end',
@@ -255,7 +269,7 @@ export const StoryGraphCanvas: React.FC<StoryGraphCanvasProps> = ({
               sourceHandle: 'out',
               target: branchEndNodeId,
               targetHandle: 'in',
-              style: { stroke: '#10b981', strokeWidth: 2 }
+              style: { stroke: '#22c55e', strokeWidth: 2 }
             });
           }
         });
@@ -272,6 +286,8 @@ export const StoryGraphCanvas: React.FC<StoryGraphCanvasProps> = ({
         id: endNodeId,
         type: 'endNode',
         position: { x: currentX, y: currentY },
+        width: 176,
+        height: 68,
         data: {
           id: endNodeId,
           type: 'end',
@@ -285,7 +301,7 @@ export const StoryGraphCanvas: React.FC<StoryGraphCanvasProps> = ({
         sourceHandle: prevSourceHandle,
         target: endNodeId,
         targetHandle: 'in',
-        style: { stroke: '#10b981', strokeWidth: 2 }
+        style: { stroke: '#22c55e', strokeWidth: 2 }
       });
     }
 
@@ -293,34 +309,23 @@ export const StoryGraphCanvas: React.FC<StoryGraphCanvasProps> = ({
   }, [project, activeSceneId]);
 
   return (
-    <div className="w-full h-full bg-[#0b0f17] relative">
+    <div className="w-full h-full relative" style={{ background: 'var(--canvas-bg)' }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        colorMode={theme === "light" ? "light" : "dark"}
         fitView
         minZoom={0.2}
         maxZoom={1.8}
         onNodeClick={(_, node) => {
-          onSelectNode?.(node.id, node.type || '', node.data);
+          onSelectNode?.(node.id, node.type || "", node.data);
         }}
         proOptions={{ hideAttribution: true }}
       >
-        <Background variant={BackgroundVariant.Dots} gap={20} size={1.2} color="#1e293b" />
-        <Controls
-          className="!bg-slate-900/90 !border-slate-800 !rounded-xl !shadow-2xl overflow-hidden [&>button]:!bg-slate-900 [&>button]:!border-slate-800 [&>button]:!text-slate-300 hover:[&>button]:!bg-slate-800 hover:[&>button]:!text-white"
-        />
-        <MiniMap
-          nodeColor={(n) => {
-            if (n.type === 'startNode' || n.type === 'endNode') return '#10b981';
-            if (n.type === 'dialogueNode') return '#a855f7';
-            if (n.type === 'showCharacterNode' || n.type === 'showBackgroundNode') return '#0284c7';
-            if (n.type === 'choiceNode') return '#d97706';
-            return '#475569';
-          }}
-          maskColor="rgba(11, 15, 23, 0.75)"
-          className="!bg-[#0f172a] !border !border-slate-800 !rounded-xl overflow-hidden !shadow-2xl"
-        />
+        <Background variant={BackgroundVariant.Dots} gap={20} size={1.2} color="#3a3a46" />
+        <Controls />
+        <GraphMiniMap />
       </ReactFlow>
     </div>
   );
