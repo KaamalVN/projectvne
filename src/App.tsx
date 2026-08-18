@@ -7,6 +7,7 @@ import {
   CharacterPosition,
   VariableType
 } from "./shared/types";
+import { buildDefaultVariableState, evaluateChoiceAvailability, generateSceneTextView } from "./shared/story-logic";
 import {
   CommandInvoker,
   AddSceneCommand,
@@ -47,7 +48,8 @@ import {
 } from "lucide-react";
 
 export default function App() {
-  const [activeViewMode, setActiveViewMode] = useState<"graph" | "storyboard" | "script" | "project">("graph");
+  const [screen, setScreen] = useState<"launcher" | "editor">("launcher");
+  const [activeViewMode, setActiveViewMode] = useState<"graph" | "storyboard" | "script" | "project">("storyboard");
   const [project, setProject] = useState<ProjectIR>(createEmptyProject());
   const [invoker, setInvoker] = useState<CommandInvoker>(() => new CommandInvoker(createEmptyProject()));
   const [selectedSceneId, setSelectedSceneId] = useState<ID | null>(null);
@@ -78,6 +80,8 @@ export default function App() {
   const [showNewCharModal, setShowNewCharModal] = useState(false);
   const [showNewVarModal, setShowNewVarModal] = useState(false);
   const [showNewAssetModal, setShowNewAssetModal] = useState(false);
+  const [recentProjects, setRecentProjects] = useState<Array<{ id: string; title: string; modifiedAt: string; thumbnail?: string; projectData: string }>>([]);
+  const [consoleCollapsed, setConsoleCollapsed] = useState<boolean>(true);
 
   const [dlgSpeakerId, setDlgSpeakerId] = useState<string>("");
   const [dlgText, setDlgText] = useState<string>("");
@@ -115,17 +119,64 @@ export default function App() {
   };
 
   useEffect(() => {
-    fetch("/stories/demo-story.json")
-      .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })
-      .then((data: ProjectIR) => {
-        const migrated = MigrationRunner.migrate(data);
-        setProject(migrated);
-        setInvoker(new CommandInvoker(migrated));
-        setSelectedSceneId(Object.keys(migrated.scenes)[0] || null);
-        addLog("info", `Loaded: ${migrated.meta.title}`);
-      })
-      .catch(() => { /* Using empty project */ });
+    try {
+      const raw = localStorage.getItem("projectvne.recentProjects");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        setRecentProjects(parsed);
+        if (Array.isArray(parsed) && parsed.some((item) => !item.projectData)) {
+          fetch("/stories/demo-story.json")
+            .then(res => res.ok ? res.json() : null)
+            .then((demo) => {
+              if (!demo) return;
+              const normalized = parsed.map((item: any) => (
+                item.projectData
+                  ? item
+                  : item.title === "Demo Visual Novel"
+                    ? { ...item, projectData: JSON.stringify(demo) }
+                    : item
+              ));
+              setRecentProjects(normalized);
+              localStorage.setItem("projectvne.recentProjects", JSON.stringify(normalized));
+            })
+            .catch(() => {});
+        }
+      }
+    } catch (_) {
+      setRecentProjects([]);
+    }
   }, []);
+
+  const persistRecentProject = (nextProject: ProjectIR) => {
+    const entry = {
+      id: nextProject.meta.id,
+      title: nextProject.meta.title,
+      modifiedAt: nextProject.meta.modifiedAt,
+      thumbnail: nextProject.flow.entrySceneId && nextProject.scenes[nextProject.flow.entrySceneId]
+        ? nextProject.scenes[nextProject.flow.entrySceneId].background?.assetId || undefined
+        : undefined,
+      projectData: JSON.stringify(nextProject),
+    };
+
+    setRecentProjects(prev => {
+      const deduped = [entry, ...prev.filter(item => item.id !== entry.id)].slice(0, 6);
+      try {
+        localStorage.setItem("projectvne.recentProjects", JSON.stringify(deduped));
+      } catch (_) {}
+      return deduped;
+    });
+  };
+
+  const openProject = (data: ProjectIR) => {
+    const migrated = MigrationRunner.migrate(data);
+    setProject(migrated);
+    setInvoker(new CommandInvoker(migrated));
+    setSelectedSceneId(Object.keys(migrated.scenes)[0] || null);
+    setActiveViewMode("storyboard");
+    setScreen("editor");
+    persistRecentProject(migrated);
+    addLog("info", `Loaded: ${migrated.meta.title}`);
+  };
 
   useEffect(() => {
     setProblems(ProblemsChecker.check(project));
@@ -220,10 +271,7 @@ export default function App() {
     reader.onload = event => {
       try {
         const migrated = MigrationRunner.migrate(JSON.parse(event.target?.result as string));
-        setProject(migrated);
-        setInvoker(new CommandInvoker(migrated));
-        setSelectedSceneId(Object.keys(migrated.scenes)[0] || null);
-        addLog("info", `Loaded: ${migrated.meta.title}`);
+        openProject(migrated);
       } catch (err) {
         addLog("error", `Parse error: ${err}`);
       }
@@ -237,15 +285,15 @@ export default function App() {
       addLog("error", `Export validation failed: ${validation.issues.join(', ')}`);
       return;
     }
-    addLog("info", "Starting Windows export...");
-    const result = await ProjectExporter.exportToWindows(project, {
+    addLog("info", "Preparing desktop export manifest for Windows, macOS, and Linux...");
+    const result = await ProjectExporter.exportDesktopBundle(project, {
       target: 'windows',
       outputDir: './exports',
       projectName: project.meta.title || 'story'
     });
     if (result.success) {
       addLog("info", `Export successful: ${result.outputPath}`);
-      addLog("info", "Run 'npm run tauri build' to create the Windows executable");
+      addLog("info", "Desktop export now stays on one project file for Windows, macOS, and Linux.");
     } else {
       addLog("error", `Export failed: ${result.error}`);
     }
@@ -320,7 +368,19 @@ export default function App() {
     setShowNewVarModal(false);
   };
 
+  const startNewProject = () => {
+    const empty = createEmptyProject();
+    setProject(empty);
+    setInvoker(new CommandInvoker(empty));
+    setSelectedSceneId(null);
+    setActiveViewMode("storyboard");
+    setScreen("editor");
+  };
+
   const currentScene = selectedSceneId ? project.scenes[selectedSceneId] : null;
+  const variableSnapshot = engineState?.variables || buildDefaultVariableState(project);
+  const isFlowGraphView = activeViewMode === "project";
+  const showConsole = isFlowGraphView && !consoleCollapsed;
 
   const inputCls = "w-full bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded px-3 py-1.5 text-xs text-[var(--text-secondary)] focus:outline-none focus:border-[var(--border-focus)]";
   const btnPrimary = "px-4 py-1.5 bg-[var(--bg-card)] hover:bg-[var(--bg-elevated)] border border-[var(--border-default)] font-semibold text-xs text-[var(--text-primary)] rounded transition-colors";
@@ -328,19 +388,76 @@ export default function App() {
   const modalWrap = "fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50";
   const modalBox = "bg-[var(--bg-panel)] border border-[var(--border-default)] rounded-xl p-5 max-w-md w-full flex flex-col gap-3.5 shadow-xl";
 
+  if (screen === "launcher") {
+    return (
+      <div className="flex flex-col h-screen w-screen bg-[var(--bg-app)] text-[var(--text-primary)] overflow-hidden">
+        <header className="h-12 px-4 flex items-center justify-between border-b border-[var(--border-subtle)] bg-[var(--bg-panel)]">
+          <button className="flex items-center gap-2" onClick={() => setScreen("launcher")} aria-label="Projects">
+            <div className="w-7 h-7 rounded bg-[var(--bg-card)] border border-[var(--border-default)] flex items-center justify-center font-bold text-[10px] text-[var(--text-muted)]">VN</div>
+            <div className="text-left">
+              <div className="text-sm font-semibold">ProjectVNE</div>
+              <div className="text-[10px] text-[var(--text-ghost)]">Project launcher</div>
+            </div>
+          </button>
+          <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+            <button className="px-3 py-1 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-card)] hover:bg-[var(--bg-elevated)]" onClick={() => setScreen("launcher")}>Projects</button>
+          </div>
+        </header>
+
+        <main className="flex-1 overflow-y-auto p-6">
+          <div className="max-w-6xl mx-auto space-y-5">
+            <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <button onClick={startNewProject} className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-panel)] p-5 text-left hover:bg-[var(--bg-elevated)] transition-colors">
+                <div className="text-sm font-semibold mb-1">New Project</div>
+                <div className="text-xs text-[var(--text-muted)]">Start with a blank story.</div>
+              </button>
+              <label className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-panel)] p-5 text-left hover:bg-[var(--bg-elevated)] transition-colors cursor-pointer">
+                <div className="text-sm font-semibold mb-1">Open Project</div>
+                <div className="text-xs text-[var(--text-muted)]">Load a project JSON file.</div>
+                <input type="file" accept=".json" className="hidden" onChange={handleLoadProject} />
+              </label>
+            </section>
+
+            <section className="space-y-3">
+              <div className="text-xs uppercase tracking-widest text-[var(--text-ghost)] font-bold">Recent Projects</div>
+              {recentProjects.length === 0 ? (
+                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] p-5 text-sm text-[var(--text-muted)]">No recent projects yet.</div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {recentProjects.map((item) => (
+                    <div key={item.id} className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-panel)] p-4">
+                      <div className="h-24 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-card)] mb-3 flex items-center justify-center text-[10px] text-[var(--text-ghost)]">
+                        {item.thumbnail ? item.thumbnail : "Thumbnail"}
+                      </div>
+                      <div className="text-sm font-semibold">{item.title}</div>
+                      <div className="text-[11px] text-[var(--text-muted)] mb-3">{new Date(item.modifiedAt).toLocaleString()}</div>
+                      <button className="text-xs px-3 py-1.5 rounded-md bg-[var(--bg-card)] border border-[var(--border-subtle)] hover:bg-[var(--bg-elevated)]" onClick={() => openProject(JSON.parse(item.projectData))}>
+                        Open
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-screen w-screen bg-[var(--bg-app)] text-[var(--text-primary)] font-sans overflow-hidden select-none">
 
       {/* ===== TOP NAV ===== */}
       <header className="h-10 bg-[var(--bg-panel)] border-b border-[var(--border-subtle)] flex items-center justify-between px-3 shrink-0 z-30">
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
+          <button className="flex items-center gap-2" onClick={() => setScreen("launcher")} aria-label="Projects">
             <div className="w-6 h-6 rounded bg-[var(--bg-card)] border border-[var(--border-default)] flex items-center justify-center font-bold text-[10px] text-[var(--text-muted)]">VN</div>
             <span className="text-xs font-semibold text-[var(--text-primary)]">ProjectVNE</span>
             <span className="text-[10px] text-[var(--text-ghost)] hidden sm:block">Visual Novel Studio</span>
-          </div>
+          </button>
           <nav className="flex items-center gap-0 text-[11px] text-[var(--text-muted)]">
-            {["File","Edit","View","Project","Tools","Help"].map(m => (
+            {["File","Edit","View","Projects","Tools","Help"].map(m => (
               <span key={m} className="px-2 py-1 hover:text-[var(--text-primary)] cursor-pointer rounded hover:bg-[var(--bg-hover)] transition-colors">{m}</span>
             ))}
           </nav>
@@ -423,7 +540,7 @@ export default function App() {
                 {treeExpanded.stories && (
                   <div className="pl-3 mt-0.5 space-y-px">
                     {Object.entries(project.scenes).map(([id, sc]) => (
-                      <div key={id} onClick={() => setSelectedSceneId(id)}
+                      <div key={id} onClick={() => { setSelectedSceneId(id); setActiveViewMode("storyboard"); }}
                         className={`flex items-center justify-between px-2 py-0.5 rounded-md cursor-pointer transition-all ${
                           selectedSceneId === id
                             ? "bg-[var(--bg-card)] text-[var(--text-primary)] border border-[var(--border-default)] shadow-sm"
@@ -524,10 +641,6 @@ export default function App() {
               <span className="text-[var(--text-primary)] font-semibold">{currentScene?.title || "No Scene"}</span>
               <span className="text-[9px] text-[var(--text-muted)] font-mono bg-[var(--bg-card)] px-1.5 py-0.5 rounded-md border border-[var(--border-subtle)]">{currentScene?.blocks.length ?? 0} blocks</span>
             </div>
-            <div className="flex items-center gap-1.5">
-              <button onClick={() => setShowAddDialogueModal(true)} className="px-2 py-0.5 bg-[var(--bg-card)] hover:bg-[var(--bg-elevated)] text-[var(--text-muted)] rounded-md text-[11px] border border-[var(--border-subtle)] transition-colors">+ Dialogue</button>
-              <button onClick={() => setShowAddChoiceModal(true)} className="px-2 py-0.5 bg-[var(--bg-card)] hover:bg-[var(--bg-elevated)] text-[var(--text-muted)] rounded-md text-[11px] border border-[var(--border-subtle)] transition-colors">+ Choice</button>
-            </div>
           </div>
 
           {/* Viewport */}
@@ -613,13 +726,14 @@ export default function App() {
               </div>
             ) : (
               <div className="w-full h-full p-6 overflow-y-auto font-mono text-[11px] text-[var(--text-muted)] bg-[var(--bg-app)]">
-                <pre className="text-[var(--text-ghost)]">// Scene: {currentScene?.title}</pre>
-                {currentScene?.blocks.map((b, i) => (
-                  <div key={i} className="pl-4 py-px">
-                    {b.type === "dialogue" && <span><strong className="text-[var(--text-muted)]">say</strong> <span className="text-[var(--text-secondary)]">{b.characterId||"narrator"}</span>: "{b.text}"</span>}
-                    {b.type === "choice" && <span className="text-[var(--text-muted)]">choice: "{b.prompt}"</span>}
+                <div className="max-w-4xl mx-auto space-y-4">
+                  <div className="text-[12px] text-[var(--text-secondary)]">
+                    Read-only generated script view. Visual edits remain the source of truth, and this text mirrors the selected scene.
                   </div>
-                ))}
+                  <pre className="whitespace-pre-wrap leading-6 p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-panel)] text-[var(--text-secondary)]">
+                    {selectedSceneId ? generateSceneTextView(project, selectedSceneId) : "// Select a scene"}
+                  </pre>
+                </div>
               </div>
             )}
           </div>
@@ -638,21 +752,34 @@ export default function App() {
             </div>
 
             {/* Console */}
-            <div className="flex-1 flex flex-col">
-              <div className="px-3 py-1.5 border-b border-[var(--border-subtle)] flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-[var(--text-ghost)]">
-                <span className="flex items-center gap-1.5"><Terminal size={10}/> Console</span>
-                <button onClick={() => setConsoleLogs([])} className="text-[var(--text-ghost)] hover:text-[var(--text-muted)] transition-colors">Clear</button>
+          <div className="flex-1 flex flex-col">
+            <div className="px-3 py-1.5 border-b border-[var(--border-subtle)] flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-[var(--text-ghost)]">
+                <button onClick={() => setConsoleCollapsed(prev => !prev)} className="flex items-center gap-1.5 hover:text-[var(--text-muted)] transition-colors">
+                  <Terminal size={10}/> Console
+                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setConsoleLogs([])} className="text-[var(--text-ghost)] hover:text-[var(--text-muted)] transition-colors">Clear</button>
+                  <button onClick={() => setConsoleCollapsed(prev => !prev)} className="text-[var(--text-ghost)] hover:text-[var(--text-muted)] transition-colors">
+                    {showConsole ? "Collapse" : "Expand"}
+                  </button>
+                </div>
               </div>
-              <div className="flex-1 p-2 overflow-y-auto font-mono text-[11px] space-y-0.5">
-                {consoleLogs.length === 0 && <div className="text-[var(--text-faint)] italic">No events yet.</div>}
-                {consoleLogs.map((log, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <span className="text-[var(--text-ghost)] text-[10px] shrink-0">{log.time}</span>
-                    <span className={`text-[9px] uppercase font-bold shrink-0 ${log.level==="info"?"text-[var(--text-muted)]":log.level==="warn"?"text-[var(--amber-text)]":"text-[var(--error-text)]"}`}>{log.level}</span>
-                    <span className="text-[var(--text-muted)] truncate">{log.msg}</span>
-                  </div>
-                ))}
-              </div>
+              {showConsole ? (
+                <div className="flex-1 p-2 overflow-y-auto font-mono text-[11px] space-y-0.5">
+                  {consoleLogs.length === 0 && <div className="text-[var(--text-faint)] italic">No events yet.</div>}
+                  {consoleLogs.map((log, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <span className="text-[var(--text-ghost)] text-[10px] shrink-0">{log.time}</span>
+                      <span className={`text-[9px] uppercase font-bold shrink-0 ${log.level==="info"?"text-[var(--text-muted)]":log.level==="warn"?"text-[var(--amber-text)]":"text-[var(--error-text)]"}`}>{log.level}</span>
+                      <span className="text-[var(--text-muted)] truncate">{log.msg}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex-1 flex items-center justify-center text-[11px] text-[var(--text-ghost)] italic">
+                  Console collapsed
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -812,20 +939,25 @@ export default function App() {
                             <div className="text-[11px] font-semibold text-[var(--text-primary)] mb-2">"{choice.prompt}"</div>
                             <div className="space-y-1">
                               {choice.options?.map((opt: any, optIdx: number) => {
-                                const isReachable = !opt.conditionId || project.conditions[opt.conditionId];
+                                const availability = evaluateChoiceAvailability(opt, project, variableSnapshot);
                                 const targetScene = opt.destinationSceneId ? project.scenes[opt.destinationSceneId] : null;
 
                                 return (
-                                  <div key={optIdx} className="flex items-center justify-between text-[10px]">
-                                    <div className="flex items-center gap-2">
-                                      <span className={isReachable ? "text-[var(--green-text)]" : "text-[var(--text-ghost)]"}>
-                                        {isReachable ? "✓" : "○"}
-                                      </span>
-                                      <span className="text-[var(--text-secondary)]">{opt.text}</span>
+                                  <div key={optIdx} className="text-[10px] p-2 rounded-md bg-[var(--bg-input)] border border-[var(--border-subtle)]">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <span className={availability.available ? "text-[var(--green-text)]" : "text-[var(--amber-text)]"}>
+                                          {availability.available ? "✓" : "!"}
+                                        </span>
+                                        <span className="text-[var(--text-secondary)]">{opt.text}</span>
+                                      </div>
+                                      {targetScene && (
+                                        <span className="text-[var(--text-muted)]">→ {targetScene.title}</span>
+                                      )}
                                     </div>
-                                    {targetScene && (
-                                      <span className="text-[var(--text-muted)]">→ {targetScene.title}</span>
-                                    )}
+                                    <div className="mt-1 text-[9px] text-[var(--text-muted)]">
+                                      {availability.explanation}
+                                    </div>
                                   </div>
                                 );
                               })}

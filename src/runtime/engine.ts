@@ -1,5 +1,7 @@
 import * as PIXI from 'pixi.js';
-import { ProjectIR, ID, StoryBlock, DialogueBlock, ShowCharacterBlock, ChoiceBlock, SetVariableBlock, VariableValue } from '../shared/types';
+import { ProjectIR, ID, StoryBlock, DialogueBlock, ShowCharacterBlock, ChoiceBlock, SetVariableBlock, VariableValue, ScriptBlock } from '../shared/types/index.ts';
+import { evaluateChoiceAvailability } from '../shared/story-logic.ts';
+import { RuntimeScriptSandbox } from './script-sandbox.ts';
 
 export interface EngineState {
   currentSceneId: ID | null;
@@ -305,6 +307,12 @@ export class PixiVisualNovelEngine {
         this.handleChoice(block as ChoiceBlock);
         break;
 
+      case 'script':
+        await this.handleScript(block as ScriptBlock);
+        this.state.currentBlockIndex++;
+        await this.processCurrentBlock();
+        break;
+
       default:
         this.state.currentBlockIndex++;
         await this.processCurrentBlock();
@@ -312,6 +320,26 @@ export class PixiVisualNovelEngine {
     }
 
     this.notifyState();
+  }
+
+  private async handleScript(block: ScriptBlock) {
+    const result = RuntimeScriptSandbox.run(block.code, {
+      getVariable: (id) => this.state.variables[id],
+      setVariable: (id, value) => {
+        this.state.variables[id] = value as VariableValue;
+        this.state.history.push(`Script set '${id}' -> ${JSON.stringify(value)}`);
+      },
+      log: (message) => {
+        this.state.history.push(`[script:${block.label}] ${message}`);
+      },
+      jumpToScene: (sceneId) => {
+        this.state.history.push(`[script:${block.label}] jump -> ${sceneId}`);
+      },
+    });
+
+    if (result.jumpToSceneId && this.story?.scenes[result.jumpToSceneId]) {
+      await this.goToScene(result.jumpToSceneId);
+    }
   }
 
   private async handleShowCharacter(block: ShowCharacterBlock) {
@@ -461,11 +489,16 @@ export class PixiVisualNovelEngine {
     this.continuePrompt.visible = false;
     this.clearChoices();
 
-    const options = block.options;
+    const options = block.options
+      .map((option) => ({
+        option,
+        availability: evaluateChoiceAvailability(option, this.story!, this.state.variables),
+      }))
+      .filter((entry) => entry.availability.available);
     const startY = 160;
     const gap = 64;
 
-    options.forEach((opt, idx) => {
+    options.forEach(({ option: opt }, idx) => {
       const choiceBtn = new PIXI.Container();
       choiceBtn.position.set(120, startY + idx * gap);
 
@@ -505,7 +538,7 @@ export class PixiVisualNovelEngine {
       this.choiceContainer.addChild(choiceBtn);
     });
 
-    this.events.onChoice?.(block.prompt, block.options);
+    this.events.onChoice?.(block.prompt, options.map(({ option }) => option));
   }
 
   private selectChoice(optionText: string, destinationSceneId: ID | null) {

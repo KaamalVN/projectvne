@@ -1,4 +1,5 @@
-import { ProjectIR } from '../shared/types';
+import type { ProjectIR } from '../shared/types/index.ts';
+import { findNeverSatisfiedConditions } from './story-logic.ts';
 
 export interface StoryProblem {
   id: string;
@@ -154,6 +155,15 @@ export class ProblemsChecker {
             }
           }
         }
+      });
+    }
+
+    for (const issue of findNeverSatisfiedConditions(project)) {
+      problems.push({
+        id: `never-true-${issue.conditionId}`,
+        severity: 'warning',
+        message: issue.reason,
+        fixSuggestion: 'Either set the underlying story fact somewhere in the project or loosen the rule.',
       });
     }
 

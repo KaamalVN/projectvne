@@ -80,6 +80,7 @@ export type StoryBlock =
   | ShowCharacterBlock
   | HideCharacterBlock
   | ChoiceBlock
+  | ScriptBlock
   | ConditionBlock
   | SetVariableBlock
   | PlayAudioBlock
@@ -128,6 +129,13 @@ export interface ChoiceOption {
   text: string;
   destinationSceneId: ID | null;
   conditionId: ID | null; // optional condition that must be true for this option to appear
+  conditionExpression?: string | null;
+}
+
+export interface ScriptBlock extends BaseBlock {
+  type: 'script';
+  label: string;
+  code: string;
 }
 
 // Condition block

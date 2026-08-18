@@ -1,4 +1,5 @@
-import { ProjectIR } from '../shared/types';
+import type { ProjectIR } from '../shared/types/index.ts';
+import { ProblemsChecker } from '../shared/problems-checker.ts';
 
 export interface ExportOptions {
   target: 'windows' | 'macos' | 'linux' | 'web';
@@ -10,98 +11,84 @@ export interface ExportResult {
   success: boolean;
   outputPath?: string;
   error?: string;
+  manifest?: string;
+}
+
+interface DesktopExportBundle {
+  schemaVersion: number;
+  projectName: string;
+  exportedAt: string;
+  targets: Array<{ target: 'windows' | 'macos' | 'linux'; bundleName: string }>;
+  story: ProjectIR;
 }
 
 export class ProjectExporter {
-  /**
-   * Export the project to a Windows executable using Tauri
-   */
   static async exportToWindows(project: ProjectIR, options: ExportOptions): Promise<ExportResult> {
-    try {
-      // For Phase 1, we'll save the project JSON and invoke Tauri build
-      // In a full implementation, this would:
-      // 1. Prepare the project JSON for the runtime
-      // 2. Copy the runtime bundle
-      // 3. Invoke Tauri's build commands
-      // 4. Package everything into a Windows executable
+    return this.exportDesktopBundle(project, options);
+  }
 
-      // For now, we'll implement a basic version that saves the project
-      // and provides instructions for the Tauri build
-      const projectJson = JSON.stringify(project, null, 2);
-      
-      // Save the project to a file that the runtime can load
-      const blob = new Blob([projectJson], { type: 'application/json' });
+  static async exportDesktopBundle(project: ProjectIR, options: ExportOptions): Promise<ExportResult> {
+    try {
+      const manifest = this.prepareDesktopBundle(project, options.projectName);
+      const blob = new Blob([manifest], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${options.projectName}-story.json`;
-      a.click();
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${options.projectName}-desktop-export.json`;
+      link.click();
       URL.revokeObjectURL(url);
 
-      // For Phase 1, we'll log that the full Tauri build needs to be run
-      console.log('To complete Windows export, run: npm run tauri build');
-      
       return {
         success: true,
-        outputPath: `${options.projectName}-story.json`
+        outputPath: `${options.projectName}-desktop-export.json`,
+        manifest,
       };
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown export error'
+        error: error instanceof Error ? error.message : 'Unknown export error',
       };
     }
   }
 
-  /**
-   * Validate that the project is ready for export
-   */
   static validateForExport(project: ProjectIR): { valid: boolean; issues: string[] } {
-    const issues: string[] = [];
+    const issues = ProblemsChecker.check(project)
+      .filter((problem) => problem.severity === 'error')
+      .map((problem) => problem.message);
 
-    // Check entry scene
-    if (!project.flow.entrySceneId || !project.scenes[project.flow.entrySceneId]) {
-      issues.push('Project must have a valid entry scene');
-    }
-
-    // Check that scenes have content
     if (Object.keys(project.scenes).length === 0) {
       issues.push('Project must have at least one scene');
     }
 
-    // Check for missing assets referenced in scenes
-    for (const [, scene] of Object.entries(project.scenes)) {
-      if (scene.background?.assetId && !project.assets[scene.background.assetId]) {
-        issues.push(`Scene "${scene.title}" references missing background asset`);
-      }
-
-      for (const block of scene.blocks) {
-        if (block.type === 'showCharacter' && !project.characters[block.characterId]) {
-          issues.push(`Scene "${scene.title}" references missing character`);
-        }
-      }
-    }
-
     return {
       valid: issues.length === 0,
-      issues
+      issues,
     };
   }
 
-  /**
-   * Prepare the runtime bundle with the project data
-   */
   static prepareRuntimeBundle(project: ProjectIR): string {
-    // Embed the project into a runtime-ready format
-    const runtimeProject = {
+    return JSON.stringify({
       ...project,
-      // Add any runtime-specific metadata
       runtime: {
         version: '1.0.0',
-        exportedAt: new Date().toISOString()
-      }
+        exportedAt: new Date().toISOString(),
+      },
+    }, null, 2);
+  }
+
+  static prepareDesktopBundle(project: ProjectIR, projectName: string): string {
+    const bundle: DesktopExportBundle = {
+      schemaVersion: project.meta.schemaVersion,
+      projectName,
+      exportedAt: new Date().toISOString(),
+      targets: [
+        { target: 'windows', bundleName: `${projectName}-windows` },
+        { target: 'macos', bundleName: `${projectName}-macos` },
+        { target: 'linux', bundleName: `${projectName}-linux` },
+      ],
+      story: project,
     };
-    
-    return JSON.stringify(runtimeProject, null, 2);
+
+    return JSON.stringify(bundle, null, 2);
   }
 }

@@ -105,6 +105,26 @@ Two editing surfaces exist over the same IR, and neither is a second source of t
 
 A plain-language "Problems" panel runs continuously in the background and surfaces issues in human language, with a fix action where possible — e.g. "This choice leads nowhere. Connect it to a scene," "Alex's happy portrait is missing. Choose another or locate the file," "This ending can never be reached because the required flag is never set."
 
+### 3.6 Editor Shell: Startup, Navigation & Chrome
+
+This subsection was missing from earlier revisions of this document. It is being added retroactively because Phases 0–3 shipped without a specified startup experience, and the app currently boots directly into the last-opened project's flow graph. That is not a design decision anyone made on purpose — it's what's left when nobody specified the shell around the editing surfaces. It is corrected in **Phase 3.5** below, but the standing rule lives here so every future phase is built against it.
+
+**Startup / project launcher.** Launching the app (`pnpm tauri dev` or the packaged build) with no project open must show a launcher, not a canvas:
+- Recent projects, each as a card with a thumbnail (auto-generated from the project's first scene's background), title, and last-modified time.
+- "New Project" (name, folder, optional starter template — e.g. blank, one-scene demo) and "Open Project" (file browser).
+- No IR is loaded, no engine/runtime is initialized, and no flow-graph or storyboard chrome (node library, inspector, console) is present at this screen. This is a distinct, lightweight view, the same way Figma, Unity Hub, and Unreal all separate "which project" from "editing a project."
+- From inside a project, a clearly clickable app icon/logo (not just decorative) or a "Projects" menu item returns to the launcher without quitting the app.
+
+**Default editing surface.** Per §3.5, the storyboard is the default surface and the flow graph is the advanced one. Opening a scene must open the storyboard card view first. The flow graph is reached by explicit navigation (a tab/toggle), never the landing view for a scene or project. The current build's "always boot into the graph" behavior is a spec violation, not a valid alternate interpretation — it inverts the beginner-first promise in §2.
+
+**Global chrome rules (apply to every editing surface):**
+- **One way to do one thing.** Where a sidebar/library already offers "add Dialogue" / "add Choice," the toolbar must not duplicate the same action with a second, differently-styled entry point. Pick the primary location for each action and remove the rest.
+- **Debug-looking surfaces are opt-in, not default.** A raw timestamped log console (`INFO`, `Loaded:`, etc.) reads as a developer tool and contradicts the "story concepts, not programming concepts" principle for the primary user. The Console is collapsed by default on the storyboard surface; it can stay open by default only in the flow graph / advanced views, and its content should be human-readable ("Started scene: Introduction") rather than raw log-line formatting.
+- **No redundant miniature views.** A canvas minimap and a separate live preview panel sitting adjacent to each other, both small and both showing a version of "the story so far," compete for attention and read as clutter. Preview (what the player sees) and minimap (where you are in the graph) serve different jobs and should be visually distinguished — different panel treatment, not two same-sized boxes side by side — or the minimap should collapse to an icon that expands on demand.
+- **Every floating control needs a legible purpose.** Canvas-corner icon clusters (zoom in/out, fit-to-screen, lock) must have hover labels/tooltips at minimum; a padlock icon with no label is a support ticket waiting to happen. If a control's only user is power users, it can live in a collapsed "canvas settings" popover instead of being permanently on-canvas.
+- **Naming stays consistent between the spec and the UI.** The plain-language "Problems panel" described in §3.5 and the "Issues" tab in the inspector must be the same feature with the same name in code, docs, and UI — not two names for one thing.
+- **Empty states teach, not just state absence.** "— none selected —" / "Click a node to inspect it" is acceptable for the Inspector, but any first-run empty state (empty scene, empty project) should include a one-line action ("Add your first line of dialogue"), not just silence.
+
 ---
 
 ## 4. Explicit Non-Goals
@@ -202,20 +222,64 @@ Each phase has a goal, required deliverables, and acceptance criteria. A phase i
 
 ---
 
-### Phase 4 — AI-Assisted Editing
+### Phase 3.5 — Stabilization Pass *(required checkpoint before Phase 4 starts)*
 
-**Goal:** add AI-assisted story editing that operates exclusively through the command/mutation system built in Phase 0, so every AI-proposed change is structured, reviewable, and undoable — never a raw text or file edit.
+**Goal:** close the gap between what §2/§3.5 specify and what the Phase 0–3 build actually does, before adding AI editing on top of it. This is not new scope — it's fixing drift that happened because the shell around the editing surfaces (launcher, default-surface behavior, chrome) was never written down until §3.6. Nothing already-built about scene/story data, the command layer, or the IR changes here — this phase touches presentation and navigation only.
 
 **Deliverables:**
-- An AI integration surface exposing: reading the current project/scene state, proposing a set of commands (via the Phase 0 command layer) as a reviewable diff, generating dialogue text for a given character/context/tone, checking a scene or project for continuity issues and unreachable branches, and explaining in plain language why a given branch is or isn't reachable.
-- Every AI-proposed change renders in the editor as an explicit, accept/reject-per-change diff before being applied — never applied silently.
-- AI features are off by default; enabling them is an explicit, visible, per-project opt-in.
-- The underlying integration is built as a first-party module using the same command/mutation API any future plugin would use — it does not get a private or privileged path into the IR.
+- Project launcher screen per §3.6 (recent projects, new/open project), shown on app start with no project loaded.
+- Storyboard set as the true default view for a scene; the flow graph becomes an explicit secondary tab, not the boot target.
+- Chrome pass over the existing Scene Graph / Storyboard screens per the rules in §3.6: remove duplicate add-entry-points, collapse the console by default outside the flow graph, resolve the minimap/preview redundancy, label or collapse the floating canvas controls, and rename any UI text that doesn't match the spec's terms (e.g. "Issues" → "Problems," if that's the name that ships).
+- A short internal UX pass note (even a one-page doc) recording what changed and why, so future AI-assisted phases don't quietly regress it again.
 
 **Acceptance criteria:**
-- Every AI-generated change is visible as a specific, named, reviewable operation (e.g. "Add choice: 'Apologize' → Scene: Reconciliation") before it's applied, and can be individually rejected.
-- Disabling AI features removes all AI-related UI and network calls; no residual background behavior.
+- A cold app launch with zero projects open shows the launcher, never a graph or storyboard canvas.
+- Opening any scene lands on the storyboard by default across a fresh install; the flow graph requires one explicit click/tab to reach.
+- No action in the reworked screens has two differently-styled entry points doing the same thing.
+- A first-time tester (per the Phase 1 acceptance-test format) is not shown a raw log console before they've opened the flow graph or explicitly expanded it.
+
+---
+
+### Phase 4 — AI-Assisted Editing
+
+**Goal:** add AI-assisted story editing that operates exclusively through the command/mutation system built in Phase 0, so every AI-proposed change is structured, reviewable, and undoable — never a raw text or file edit. This phase also defines, concretely, what "AI" means in this product: which providers, what surface, what it can see, and what it's never allowed to touch — because "AI-assisted editing" as a one-line goal is not implementable as written; it under-specifies the exact thing a prior phase (Phase 3, §3.1) already did carefully for the scripting sandbox.
+
+**4.1 What "AI" concretely is here**
+
+The reference point is the model-provider pattern used by IDE AI assistants (VS Code Copilot Chat, JetBrains AI Assistant): a chat surface backed by a swappable model provider, not a single hardcoded vendor call baked into a button.
+
+- **Provider abstraction, not a hardcoded vendor.** The integration talks to models through one internal interface (`sendMessage(context, tools) → proposedCommands | text`), with adapters for: (a) hosted providers via **bring-your-own-API-key** — Anthropic, OpenAI, and Google are the three to support at launch, matching what every major IDE assistant currently supports as its BYOK baseline; (b) a local-model adapter (e.g. an Ollama-compatible endpoint) for users who don't want to send story text to a cloud API at all. No provider is hardcoded into the UI layer — adding a fourth provider later is an adapter, not a rearchitecture.
+- **Where it lives in the UI.** A dockable **AI panel** (chat-style, same visual family as the Inspector/Problems panels — not a separate window), opened from a toolbar icon next to Problems/Debugger. It has: a model/provider picker at the top (mirrors the BYOK model-picker pattern — pick provider, paste key or point at a local endpoint, pick model), a scrollable message thread, and a text input. This is the concrete answer to "where is the chat window" — it is a panel, not a popup, and it is always scoped to the currently open project.
+- **API keys** are stored via the OS keychain/credential store (the same mechanism Tauri already has access to on each desktop platform), never written into the project JSON — a story file must stay shareable without leaking someone's key.
+- **Context the AI can see, explicitly:** the current scene's IR (or the whole project, if the user widens scope in the panel), character and variable names/descriptions, and the Problems-panel output. It does **not** get filesystem or network access itself — every action it takes is a proposed command through the Phase 0 layer, same boundary already enforced for Script Nodes in Phase 3.
+
+**4.2 What it can do**
+
+- Propose commands via the Phase 0 command layer (add/edit dialogue, add a choice, set a condition, etc.) — rendered as a reviewable diff, never applied silently.
+- Generate dialogue text for a given character/context/tone, inserted as a proposed `addDialogueBlock`/`editDialogueBlock` command like anything else — text generation is not a special, unreviewed path.
+- Check a scene or the whole project for continuity issues and unreachable branches, surfaced through the same Problems-panel language and severity levels already defined in §3.5, not a separate AI-only issue list.
+- Explain in plain language why a given branch is or isn't reachable, as a conversational answer (no command involved — read-only questions don't need diff review).
+
+**4.3 Review UX**
+
+- Every proposed change appears as a named, expandable diff card in the AI panel (e.g. "Add choice: 'Apologize' → Scene: Reconciliation") with **Accept** / **Reject** per card and an **Accept all** for a batch, mirroring the reviewable-diff pattern already used for Script Node changes in Phase 3's text view.
+- Accepted cards apply through the normal command layer, so they're undoable exactly like a manual edit — Ctrl+Z after accepting an AI change works identically to undoing a manual one.
+- Rejected or ignored proposals are discarded; nothing is applied on chat-close or timeout.
+
+**Deliverables:**
+- Provider-abstracted AI integration surface (§4.1) with adapters for at least Anthropic, OpenAI, Google (BYOK), and one local-model adapter.
+- Dockable AI panel with model/provider picker, chat thread, and diff-review cards (§4.2, §4.3).
+- Capabilities: propose commands as a reviewable diff, generate dialogue text, check continuity/reachability against the existing Problems-panel taxonomy, explain branch reachability in plain language.
+- AI features are off by default; enabling them is an explicit, visible, per-project opt-in (a project-level setting, not just an account-level one, since a project may be shared with people who don't want AI touching it).
+- The underlying integration is built as a first-party module using the same command/mutation API any future plugin would use — it does not get a private or privileged path into the IR.
+- Settings surface for provider/key management, reachable from both the AI panel's own picker and the app's general Settings, not two independently-maintained copies of the same list.
+
+**Acceptance criteria:**
+- Every AI-generated change is visible as a specific, named, reviewable operation before it's applied, and can be individually rejected.
+- Disabling AI features removes all AI-related UI and network calls; no residual background behavior, including no calls from a "check continuity" background job.
 - An AI-proposed edit that fails validation (e.g. references a non-existent character) is rejected the same way a manually-issued invalid command would be, with the same error path.
+- Switching providers (e.g. Anthropic key → local Ollama model) requires no code change and no restart beyond re-opening the AI panel; both produce proposals through the identical diff-review UI.
+- With AI features enabled but no request in flight, no network calls originate from the app (verified the same way Phase 3 verified the Script Node sandbox boundary).
 
 ---
 
@@ -224,7 +288,8 @@ Each phase has a goal, required deliverables, and acceptance criteria. A phase i
 **Goal:** prove the plugin model by using it internally, before exposing it publicly.
 
 **Deliverables:**
-- A versioned plugin manifest format and a capability-scoped permission model (filesystem access, network access, read/write access to specific parts of the IR — each explicit, none ambient).
+- A versioned plugin manifest format and a capability-scoped permission model (filesystem access, network access, read/write access to specific parts of the IR — each explicit, none ambient). This reuses the same "explicit, scoped, reviewable" spirit already established for AI proposals in Phase 4 — a plugin's declared capabilities should be inspectable the same way an AI panel's provider/scope is.
+- A plugin listing/management surface in the editor (even if internal-only at this phase): installed plugins, their declared capabilities, and an enable/disable toggle per plugin — the concrete home for the "disabling a plugin doesn't crash the editor" acceptance criterion below.
 - The engine's own default behavior — dialogue rendering, choice handling, base sprite display — reimplemented as first-party plugins against this same API, so the "true" core is minimal and the team is using the exact API any future third party would get.
 - Plugin code (first-party, for now) runs inside the QuickJS-WASM sandbox from Phase 3, communicating with the host only through the typed API surface it explicitly exposes.
 - New node types, panels, and asset importers become addable through this API, demonstrated with at least one non-trivial first-party example of each.
@@ -247,7 +312,8 @@ Each phase has a goal, required deliverables, and acceptance criteria. A phase i
 - Web export as a fully supported target: validated against real constraints — asset size limits, browser storage behavior for saves, audio/video codec compatibility, background-loading behavior — not just "the runtime happens to run in a browser."
 - Android export.
 - Cloud build service (meters compute; solves signing without owning every target platform's native toolchain).
-- Optional, metered, opt-in cloud AI credits for the Phase 4 AI integration, with "bring your own key" remaining free permanently.
+- Optional, metered, opt-in cloud AI credits for the Phase 4 AI integration, with "bring your own key" remaining free permanently — the pricing/credit model sits alongside the provider picker from §4.1, as one more entry in the same list rather than a separately-styled upsell surface.
+- A public-facing plugin/marketplace listing page reusing the internal plugin management surface built in Phase 5, extended with install-from-marketplace rather than rebuilt separately.
 
 **Acceptance criteria:**
 - A third-party developer, given only the public plugin documentation, can build and ship a working plugin (a new node type, asset importer, or panel) without any private support channel.
@@ -262,3 +328,4 @@ Each phase has a goal, required deliverables, and acceptance criteria. A phase i
 - **Every schema change to the IR ships with a migration and a version bump**, from Phase 0 onward. Retrofitting migrations after real projects exist is out of the question.
 - **Every error surfaced to the user is in plain language with a specific cause**, never a raw exception, stack trace, or generic "something went wrong."
 - **The command/mutation system is the only path to modifying the IR**, for the editor UI, the AI integration, and (later) plugins alike. No feature gets a private mutation path.
+- **New chrome follows §3.6.** Any phase that adds a new panel, toolbar, or entry point (the AI panel in Phase 4, the plugin manager in Phase 5, the marketplace in Phase 6) is checked against §3.6's rules before it ships — one entry point per action, labeled controls, no redundant twin panels — the same way every phase is checked against its own acceptance criteria.
