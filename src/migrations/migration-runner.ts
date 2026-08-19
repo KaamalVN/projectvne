@@ -58,16 +58,47 @@ const migrateV0ToV1: MigrationFunction = (project: any) => {
     };
   }
 
+  // Ensure AI settings exist
+  if (!migrated.ai) {
+    migrated.ai = {
+      enabled: false
+    };
+  }
+
+  return migrated;
+};
+
+// Migration from version 1 to version 2 (adds the per-project AI assistant setting)
+const migrateV1ToV2: MigrationFunction = (project: any) => {
+  const migrated: ProjectIR = {
+    ...project,
+    meta: {
+      ...project.meta,
+      schemaVersion: 2
+    }
+  };
+
+  if (!migrated.ai) {
+    migrated.ai = {
+      enabled: false
+    };
+  } else {
+    migrated.ai = {
+      enabled: migrated.ai.enabled === true
+    };
+  }
+
   return migrated;
 };
 
 // Map of migrations: from version -> to version
 const migrations: Record<number, MigrationFunction> = {
-  1: migrateV0ToV1
+  1: migrateV0ToV1,
+  2: migrateV1ToV2
 };
 
 export class MigrationRunner {
-  private static readonly CURRENT_SCHEMA_VERSION = 1;
+  private static readonly CURRENT_SCHEMA_VERSION = 2;
 
   /**
    * Migrate a project to the current schema version

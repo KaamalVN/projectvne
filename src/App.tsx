@@ -24,6 +24,10 @@ import { StoryGraphCanvas } from "./components/StoryGraphCanvas";
 import { ProjectFlowGraph } from "./components/ProjectFlowGraph";
 import { ConditionEditor } from "./components/ConditionEditor";
 import { ProjectExporter } from "./export/exporter";
+import { AiPanel } from "./components/AiPanel";
+import { SettingsModal } from "./components/SettingsModal";
+import { useAiState } from "./ai/use-ai-state";
+import type { IRCommand } from "./commands/command-types";
 
 import {
   Play,
@@ -44,7 +48,9 @@ import {
   Eye,
   Download,
   Sun,
-  Moon
+  Moon,
+  Sparkles,
+  Settings
 } from "lucide-react";
 
 export default function App() {
@@ -58,6 +64,10 @@ export default function App() {
   const [selectedNodeData, setSelectedNodeData] = useState<any>(null);
   const [inspectorTab, setInspectorTab] = useState<"inspector" | "problems" | "variables" | "conditions" | "debugger">("inspector");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [showSettings, setShowSettings] = useState(false);
+  const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const aiState = useAiState();
+  const { prefs, setPrefs, keys, loadKey, saveKey, storageMode } = aiState;
 
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<PixiVisualNovelEngine | null>(null);
@@ -231,23 +241,42 @@ export default function App() {
     };
   }, [selectedSceneId]);
 
-  const executeCommand = (cmd: any) => {
+  const executeCommand = (cmd: any): boolean => {
     const res = invoker.execute(cmd);
     if (res.success && res.state) {
-      setProject({ ...res.state });
+      // Commands never touch the per-project AI flag, and the invoker snapshot
+      // predates it, so preserve the live setting from App state.
+      const nextState = res.state;
+      setProject(prev => ({ ...nextState, ai: prev.ai }));
+      return true;
     } else {
       addLog("error", `Couldn't apply that change: ${res.error}`);
+      return false;
     }
   };
 
+  const toggleAiEnabled = (v: boolean) => {
+    setProject(p => ({ ...p, ai: { enabled: v } }));
+    addLog("info", v ? "AI Assistant enabled for this project" : "AI Assistant disabled for this project");
+    if (!v) setAiPanelOpen(false);
+  };
+
+  const applyAiCommand = (command: IRCommand): boolean => executeCommand(command);
+
   const handleUndo = () => {
     const res = invoker.undo();
-    if (res.success && res.state) setProject({ ...res.state });
+    if (res.success && res.state) {
+      const nextState = res.state;
+      setProject(prev => ({ ...nextState, ai: prev.ai }));
+    }
   };
 
   const handleRedo = () => {
     const res = invoker.redo();
-    if (res.success && res.state) setProject({ ...res.state });
+    if (res.success && res.state) {
+      const nextState = res.state;
+      setProject(prev => ({ ...nextState, ai: prev.ai }));
+    }
   };
 
   const handleGraphNodeSelect = (nodeId: string, nodeType: string, data: any) => {
@@ -546,8 +575,8 @@ export default function App() {
           </div>
 
           <div className="flex items-center text-[var(--text-ghost)] gap-0.5">
-            <button onClick={handleUndo} disabled={!invoker.canUndo()} className="p-1.5 hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] disabled:opacity-20 rounded-md transition-colors"><Undo2 size={13}/></button>
-            <button onClick={handleRedo} disabled={!invoker.canRedo()} className="p-1.5 hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] disabled:opacity-20 rounded-md transition-colors"><Redo2 size={13}/></button>
+            <button onClick={handleUndo} data-testid="undo" disabled={!invoker.canUndo()} className="p-1.5 hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] disabled:opacity-20 rounded-md transition-colors"><Undo2 size={13}/></button>
+            <button onClick={handleRedo} data-testid="redo" disabled={!invoker.canRedo()} className="p-1.5 hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] disabled:opacity-20 rounded-md transition-colors"><Redo2 size={13}/></button>
             <button onClick={handleSaveProject} className="p-1.5 hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] rounded-md transition-colors"><Save size={13}/></button>
             <label className="p-1.5 hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] rounded-md transition-colors cursor-pointer">
               <FolderOpen size={13}/>
@@ -557,6 +586,19 @@ export default function App() {
           </div>
 
           <div className="w-px h-4 bg-[var(--border-subtle)] mx-1" />
+
+          {project.ai?.enabled && (
+            <button
+              onClick={() => setAiPanelOpen(v => !v)}
+              data-testid="ai-toolbar-toggle"
+              title="AI Assistant"
+              className={`p-1.5 rounded-md transition-colors ${aiPanelOpen ? "text-[var(--accent)] bg-[var(--bg-hover)]" : "text-[var(--text-ghost)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"}`}
+            >
+              <Sparkles size={13}/>
+            </button>
+          )}
+
+          <button onClick={() => setShowSettings(true)} data-testid="open-settings" className="p-1.5 hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] rounded-md transition-colors" title="Settings"><Settings size={13}/></button>
 
           <button onClick={toggleTheme} className="theme-toggle" title="Toggle theme">
             {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
@@ -834,20 +876,41 @@ export default function App() {
         </div>
 
         {/* ===== RIGHT SIDEBAR ===== */}
-        <aside className="w-64 bg-[var(--bg-panel)] border-l border-[var(--border-subtle)] flex flex-col shrink-0">
+        <aside className={`${project.ai?.enabled && aiPanelOpen ? "w-80" : "w-64"} bg-[var(--bg-panel)] border-l border-[var(--border-subtle)] flex flex-col shrink-0`}>
           <div className="flex border-b border-[var(--border-subtle)] text-[11px]">
-            {(["inspector","problems","variables","conditions","debugger"] as const).map(tab => {
-              const labels: Record<string,string> = { inspector:"Inspector", problems:`Problems (${problems.length})`, variables:"Variables", conditions:"Conditions", debugger:"Debugger" };
+            {(project.ai?.enabled
+              ? (["inspector","problems","variables","conditions","debugger","ai"] as const)
+              : (["inspector","problems","variables","conditions","debugger"] as const)
+            ).map(tab => {
+              const labels: Record<string,string> = { inspector:"Inspector", problems:`Problems (${problems.length})`, variables:"Variables", conditions:"Conditions", debugger:"Debugger", ai:"AI" };
+              const active = tab === "ai" ? aiPanelOpen : inspectorTab === tab;
               return (
-                <button key={tab} onClick={() => setInspectorTab(tab)}
+                <button key={tab} data-testid={tab === "ai" ? "ai-tab" : undefined} onClick={() => { if (tab === "ai") setAiPanelOpen(true); else setInspectorTab(tab); }}
                   className={`flex-1 py-2 text-center transition-colors font-semibold ${
-                    inspectorTab===tab ? "text-[var(--text-primary)] border-b-2 border-[var(--accent)] bg-[var(--bg-surface)]" : "text-[var(--text-ghost)] hover:text-[var(--text-secondary)]"
+                    active ? "text-[var(--text-primary)] border-b-2 border-[var(--accent)] bg-[var(--bg-surface)]" : "text-[var(--text-ghost)] hover:text-[var(--text-secondary)]"
                   }`}>{labels[tab]}</button>
               );
             })}
           </div>
 
-          <div className="flex-1 overflow-y-auto p-3 space-y-3 text-[11px]">
+          <div className={project.ai?.enabled && aiPanelOpen ? "flex-1 flex flex-col min-h-0" : "flex-1 overflow-y-auto p-3 space-y-3 text-[11px]"}>
+            {project.ai?.enabled && aiPanelOpen ? (
+              <AiPanel
+                project={project}
+                selectedSceneId={selectedSceneId}
+                enabled={!!project.ai?.enabled}
+                onToggleEnabled={toggleAiEnabled}
+                prefs={prefs}
+                setPrefs={setPrefs}
+                keys={keys}
+                loadKey={loadKey}
+                saveKey={saveKey}
+                storageMode={storageMode}
+                onApplyCommand={applyAiCommand}
+                onOpenSettings={() => setShowSettings(true)}
+              />
+            ) : (
+            <>
             {inspectorTab === "inspector" && (
               <div className="space-y-3">
                 <div>
@@ -1036,6 +1099,8 @@ export default function App() {
                 ))}
               </div>
             )}
+            </>
+            )}
           </div>
         </aside>
       </div>
@@ -1184,6 +1249,24 @@ export default function App() {
             <button onClick={()=>{ if(!assetName.trim()) return; executeCommand(new CreateAssetCommand({name:assetName,type:"background",fileReference:assetPath})); setShowNewAssetModal(false); }} className={btnPrimary}>Save</button>
           </div>
         </div></div>
+      )}
+
+      {showSettings && (
+        <SettingsModal
+          onClose={() => setShowSettings(false)}
+          theme={theme}
+          toggleTheme={toggleTheme}
+          aiSettings={{
+            enabled: !!project.ai?.enabled,
+            onToggleEnabled: toggleAiEnabled,
+            prefs,
+            setPrefs,
+            keys,
+            loadKey,
+            saveKey,
+            storageMode,
+          }}
+        />
       )}
 
       {newProjectModal}

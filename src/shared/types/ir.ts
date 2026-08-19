@@ -1,7 +1,7 @@
 // Shared TypeScript types for the IR (Intermediate Representation)
 // This file is shared between the editor, runtime, validator, and exporter
 
-export type SchemaVersion = 1;
+export type SchemaVersion = 2;
 
 // Unique identifiers - string with ID alias
 export type ID = string;
@@ -260,9 +260,16 @@ export interface ProjectIR {
   scenes: Record<ID, Scene>;
   flow: Flow;
   ui: UISettings;
+  ai: AiProjectSettings;
   localization: Localization;
   exportProfiles: Record<ID, ExportProfile>;
   conditions: Record<ID, Condition>;
+}
+
+// Per-project AI assistant settings (v2)
+export interface AiProjectSettings {
+  // Master switch for the AI assistant. Off by default; keys never live here.
+  enabled: boolean;
 }
 
 // Utility type for creating a new project with defaults
@@ -272,7 +279,7 @@ export function createEmptyProject(): ProjectIR {
 
   return {
     meta: {
-      schemaVersion: 1,
+      schemaVersion: 2,
       id: projectId,
       title: 'Untitled Project',
       createdAt: now,
@@ -290,6 +297,9 @@ export function createEmptyProject(): ProjectIR {
       theme: 'auto',
       dialogueBoxStyle: 'classic',
       choicePresentation: 'vertical',
+    },
+    ai: {
+      enabled: false,
     },
     localization: {
       defaultLocale: 'en',
