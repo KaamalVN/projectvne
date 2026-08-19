@@ -1,7 +1,22 @@
 import * as PIXI from 'pixi.js';
-import { ProjectIR, ID, StoryBlock, DialogueBlock, ShowCharacterBlock, ChoiceBlock, SetVariableBlock, VariableValue, ScriptBlock } from '../shared/types/index.ts';
+import {
+  ProjectIR,
+  ID,
+  StoryBlock,
+  PluginBlock,
+  ChoiceOption,
+  CharacterPosition,
+  VariableValue,
+} from '../shared/types/index.ts';
 import { evaluateChoiceAvailability } from '../shared/story-logic.ts';
 import { RuntimeScriptSandbox } from './script-sandbox.ts';
+import {
+  PluginHost,
+  createDefaultPluginHost,
+  FlashbackPayload,
+  PluginEngineAdapter,
+  RunScriptResult,
+} from '../plugins/index.ts';
 
 export interface EngineState {
   currentSceneId: ID | null;
@@ -18,10 +33,20 @@ export interface EngineEvents {
   onDialogue?: (speaker: string, text: string) => void;
   onChoice?: (prompt: string, options: { text: string; destinationSceneId: ID | null }[]) => void;
   onStoryEnd?: () => void;
+  onPluginMissing?: (blockType: string, message: string) => void;
+  onFlashback?: (title: string, text: string) => void;
 }
 
-export class PixiVisualNovelEngine {
+function parseHexColor(hex: string | undefined): number {
+  if (!hex || typeof hex !== 'string') return 0x141418;
+  const cleaned = hex.replace('#', '');
+  if (!/^[0-9a-fA-F]{6}$/.test(cleaned)) return 0x141418;
+  return parseInt(cleaned, 16);
+}
+
+export class PixiVisualNovelEngine implements PluginEngineAdapter {
   public app: PIXI.Application;
+  private pluginHost: PluginHost;
   private rootContainer: PIXI.Container;
   private bgContainer: PIXI.Container;
   private characterContainer: PIXI.Container;
@@ -41,6 +66,10 @@ export class PixiVisualNovelEngine {
   private dialogueText!: PIXI.Text;
   private continuePrompt!: PIXI.Text;
 
+  // Plugin-driven overlays
+  private flashbackOverlay: PIXI.Container | null = null;
+  private missingOverlay: PIXI.Container | null = null;
+
   // Story & Runtime State
   private story: ProjectIR | null = null;
   private state: EngineState = {
@@ -59,9 +88,11 @@ export class PixiVisualNovelEngine {
   private isTypewriterComplete: boolean = true;
   private isDestroyed: boolean = false;
   private initPromise: Promise<void>;
+  private pendingJumpSceneId: string | null = null;
 
-  constructor(targetElement: HTMLElement, events: EngineEvents = {}) {
+  constructor(targetElement: HTMLElement, events: EngineEvents = {}, pluginHost?: PluginHost) {
     this.events = events;
+    this.pluginHost = pluginHost ?? createDefaultPluginHost();
     this.app = new PIXI.Application();
 
     // Containers
@@ -185,7 +216,7 @@ export class PixiVisualNovelEngine {
   public async loadStory(storyData: ProjectIR) {
     await this.initPromise;
     this.story = storyData;
-    
+
     // Initialize default variables
     this.state.variables = {};
     if (this.story.variables) {
@@ -221,6 +252,8 @@ export class PixiVisualNovelEngine {
 
     // Clear choices
     this.clearChoices();
+    this.hideFlashback();
+    this.hideMissingOverlay();
 
     // Render background
     await this.renderBackground(scene.background?.assetId || null);
@@ -274,171 +307,71 @@ export class PixiVisualNovelEngine {
       // Reached end of current scene
       this.dialogueBox.visible = false;
       this.clearChoices();
+      this.hideFlashback();
+      this.hideMissingOverlay();
       this.events.onStoryEnd?.();
+      this.notifyState();
       return;
     }
 
     const block: StoryBlock = scene.blocks[this.state.currentBlockIndex];
 
-    switch (block.type) {
-      case 'showCharacter':
-        await this.handleShowCharacter(block as ShowCharacterBlock);
-        this.state.currentBlockIndex++;
-        await this.processCurrentBlock();
-        break;
+    // A new block resets any plugin-driven overlay from the previous one.
+    this.hideFlashback();
+    this.hideMissingOverlay();
+    this.pendingJumpSceneId = null;
 
-      case 'hideCharacter':
-        this.handleHideCharacter(block.characterId);
-        this.state.currentBlockIndex++;
-        await this.processCurrentBlock();
-        break;
+    const result = this.pluginHost.invoke(block, this);
 
-      case 'setVariable':
-        this.handleSetVariable(block as SetVariableBlock);
-        this.state.currentBlockIndex++;
-        await this.processCurrentBlock();
-        break;
-
-      case 'dialogue':
-        this.handleDialogue(block as DialogueBlock);
-        break;
-
-      case 'choice':
-        this.handleChoice(block as ChoiceBlock);
-        break;
-
-      case 'script':
-        await this.handleScript(block as ScriptBlock);
-        this.state.currentBlockIndex++;
-        await this.processCurrentBlock();
-        break;
-
-      default:
-        this.state.currentBlockIndex++;
-        await this.processCurrentBlock();
-        break;
+    if (result.missingCapability) {
+      this.handleMissingCapability(block, result.missingCapability);
+      this.notifyState();
+      return;
     }
 
+    const jumpTarget = result.jumpToSceneId || this.pendingJumpSceneId;
+    if (jumpTarget && this.story.scenes[jumpTarget]) {
+      await this.goToScene(jumpTarget);
+      return;
+    }
+
+    if (result.waitForInput) {
+      // The block presented content that waits for player input (dialogue,
+      // choice, flashback, missing capability handled above).
+      this.notifyState();
+      return;
+    }
+
+    // Auto-advance past blocks that complete immediately.
+    this.state.currentBlockIndex++;
+    await this.processCurrentBlock();
     this.notifyState();
   }
 
-  private async handleScript(block: ScriptBlock) {
-    const result = RuntimeScriptSandbox.run(block.code, {
-      getVariable: (id) => this.state.variables[id],
-      setVariable: (id, value) => {
-        this.state.variables[id] = value as VariableValue;
-        this.state.history.push(`Script set '${id}' -> ${JSON.stringify(value)}`);
-      },
-      log: (message) => {
-        this.state.history.push(`[script:${block.label}] ${message}`);
-      },
-      jumpToScene: (sceneId) => {
-        this.state.history.push(`[script:${block.label}] jump -> ${sceneId}`);
-      },
-    });
+  // ---- PluginEngineAdapter implementation --------------------------------
 
-    if (result.jumpToSceneId && this.story?.scenes[result.jumpToSceneId]) {
-      await this.goToScene(result.jumpToSceneId);
-    }
-  }
-
-  private async handleShowCharacter(block: ShowCharacterBlock) {
-    if (!this.story) return;
-    const char = this.story.characters[block.characterId];
-    if (!char) return;
-
-    const portraitRef = char.portraits[block.expression];
-    const assetId = portraitRef?.assetId;
-    const asset = assetId ? this.story.assets[assetId] : null;
-
-    if (!asset) return;
-
-    const assetUrl = asset.fileReference.startsWith('/') ? asset.fileReference : `/${asset.fileReference}`;
-
-    try {
-      const texture = await PIXI.Assets.load(assetUrl);
-      
-      let sprite = this.characters.get(block.characterId);
-      if (!sprite) {
-        sprite = new PIXI.Sprite(texture);
-        this.characters.set(block.characterId, sprite);
-        this.characterContainer.addChild(sprite);
-      } else {
-        sprite.texture = texture;
-      }
-
-      // Height is standard 500px on 600px canvas
-      const targetHeight = 500;
-      const scale = targetHeight / (texture.height || 600);
-      sprite.scale.set(scale, scale);
-      sprite.y = 600 - targetHeight;
-
-      // Position x
-      if (block.position === 'left') {
-        sprite.x = 60;
-      } else if (block.position === 'right') {
-        sprite.x = 800 - sprite.width - 60;
-      } else {
-        // center
-        sprite.x = (800 - sprite.width) / 2;
-      }
-
-      sprite.visible = true;
-    } catch (err) {
-      console.warn(`Could not load character asset ${assetUrl}`, err);
-    }
-  }
-
-  private handleHideCharacter(characterId: string) {
-    const sprite = this.characters.get(characterId);
-    if (sprite) {
-      sprite.visible = false;
-    }
-  }
-
-  private handleSetVariable(block: SetVariableBlock) {
-    const current = this.state.variables[block.variableId] ?? 0;
-    let nextValue: VariableValue = block.value;
-
-    if (typeof current === 'number' && typeof block.value === 'number') {
-      if (block.operation === 'add') nextValue = current + block.value;
-      else if (block.operation === 'subtract') nextValue = current - block.value;
-      else if (block.operation === 'multiply') nextValue = current * block.value;
-      else if (block.operation === 'divide') nextValue = current / block.value;
-      else nextValue = block.value;
-    } else {
-      nextValue = block.value;
-    }
-
-    this.state.variables[block.variableId] = nextValue;
-    this.state.history.push(`Variable '${block.variableId}' -> ${nextValue}`);
-  }
-
-  private handleDialogue(block: DialogueBlock) {
+  public showDialogue(speaker: string, text: string): void {
     this.clearChoices();
     this.dialogueBox.visible = true;
 
-    // Resolve speaker name
-    let speakerName = 'Narrator';
-    if (block.characterId && this.story?.characters[block.characterId]) {
-      speakerName = this.story.characters[block.characterId].name;
+    if (speaker && speaker !== 'Narrator') {
       this.nameBadgeBg.visible = true;
       this.nameText.visible = true;
-      this.nameText.text = speakerName;
+      this.nameText.text = speaker;
     } else {
       this.nameBadgeBg.visible = false;
       this.nameText.visible = false;
     }
 
     // Start typewriter
-    this.targetText = block.text;
+    this.targetText = text;
     this.displayedText = '';
     this.dialogueText.text = '';
     this.isTypewriterComplete = false;
     this.continuePrompt.visible = false;
     this.state.isWaitingForInput = true;
 
-    this.events.onDialogue?.(speakerName, block.text);
+    this.events.onDialogue?.(speaker, text);
 
     if (this.typewriterInterval) {
       clearInterval(this.typewriterInterval);
@@ -456,40 +389,13 @@ export class PixiVisualNovelEngine {
     }, 20);
   }
 
-  private finishTypewriter() {
-    if (this.typewriterInterval) {
-      clearInterval(this.typewriterInterval);
-      this.typewriterInterval = null;
-    }
-    this.displayedText = this.targetText;
-    this.dialogueText.text = this.displayedText;
-    this.isTypewriterComplete = true;
-    this.continuePrompt.visible = true;
-  }
-
-  public handleAdvance() {
-    if (!this.state.isWaitingForInput || this.state.isShowingChoices) return;
-
-    if (!this.isTypewriterComplete) {
-      // Instant skip to complete text
-      this.finishTypewriter();
-      return;
-    }
-
-    // Advance to next block
-    this.state.isWaitingForInput = false;
-    this.continuePrompt.visible = false;
-    this.state.currentBlockIndex++;
-    this.processCurrentBlock();
-  }
-
-  private handleChoice(block: ChoiceBlock) {
+  public presentChoices(prompt: string, options: ChoiceOption[]): void {
     this.state.isShowingChoices = true;
     this.state.isWaitingForInput = true;
     this.continuePrompt.visible = false;
     this.clearChoices();
 
-    const options = block.options
+    const available = options
       .map((option) => ({
         option,
         availability: evaluateChoiceAvailability(option, this.story!, this.state.variables),
@@ -498,7 +404,7 @@ export class PixiVisualNovelEngine {
     const startY = 160;
     const gap = 64;
 
-    options.forEach(({ option: opt }, idx) => {
+    available.forEach(({ option: opt }, idx) => {
       const choiceBtn = new PIXI.Container();
       choiceBtn.position.set(120, startY + idx * gap);
 
@@ -538,13 +444,275 @@ export class PixiVisualNovelEngine {
       this.choiceContainer.addChild(choiceBtn);
     });
 
-    this.events.onChoice?.(block.prompt, options.map(({ option }) => option));
+    this.events.onChoice?.(prompt, available.map(({ option }) => option));
+  }
+
+  public showCharacter(characterId: string, expression: string, position: CharacterPosition): void {
+    if (!this.story) return;
+    const char = this.story.characters[characterId];
+    if (!char) return;
+
+    const portraitRef = char.portraits[expression];
+    const assetId = portraitRef?.assetId;
+    const asset = assetId ? this.story.assets[assetId] : null;
+
+    if (!asset) return;
+
+    const assetUrl = asset.fileReference.startsWith('/') ? asset.fileReference : `/${asset.fileReference}`;
+
+    try {
+      PIXI.Assets.load(assetUrl).then((texture) => {
+        if (this.isDestroyed) return;
+
+        let sprite = this.characters.get(characterId);
+        if (!sprite) {
+          sprite = new PIXI.Sprite(texture);
+          this.characters.set(characterId, sprite);
+          this.characterContainer.addChild(sprite);
+        } else {
+          sprite.texture = texture;
+        }
+
+        // Height is standard 500px on 600px canvas
+        const targetHeight = 500;
+        const scale = targetHeight / (texture.height || 600);
+        sprite.scale.set(scale, scale);
+        sprite.y = 600 - targetHeight;
+
+        // Position x
+        if (position === 'left') {
+          sprite.x = 60;
+        } else if (position === 'right') {
+          sprite.x = 800 - sprite.width - 60;
+        } else {
+          // center
+          sprite.x = (800 - sprite.width) / 2;
+        }
+
+        sprite.visible = true;
+      }).catch((err) => {
+        console.warn(`Could not load character asset ${assetUrl}`, err);
+      });
+    } catch (err) {
+      console.warn(`Could not load character asset ${assetUrl}`, err);
+    }
+  }
+
+  public hideCharacter(characterId: string): void {
+    const sprite = this.characters.get(characterId);
+    if (sprite) {
+      sprite.visible = false;
+    }
+  }
+
+  public getVariable(id: string): unknown {
+    return this.state.variables[id];
+  }
+
+  public setVariable(id: string, value: unknown): void {
+    this.state.variables[id] = value as VariableValue;
+    this.state.history.push(`Variable '${id}' -> ${JSON.stringify(value)}`);
+  }
+
+  public getCharacterName(characterId: string): string | null {
+    return this.story?.characters[characterId]?.name ?? null;
+  }
+
+  public showFlashback(payload: FlashbackPayload): void {
+    this.hideFlashback();
+    const overlay = new PIXI.Container();
+
+    const bg = new PIXI.Graphics();
+    bg.rect(0, 0, 800, 600);
+    bg.fill({ color: parseHexColor(payload.tint), alpha: 0.97 });
+    overlay.addChild(bg);
+
+    const title = new PIXI.Text({
+      text: payload.title || 'Flashback',
+      style: {
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+        fontSize: 22,
+        fontWeight: 'bold',
+        fill: 0xf5f5f7,
+      }
+    });
+    title.position.set(40, 200);
+    overlay.addChild(title);
+
+    const body = new PIXI.Text({
+      text: payload.text || '',
+      style: {
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+        fontSize: 15,
+        fill: 0xd4d4d8,
+        wordWrap: true,
+        wordWrapWidth: 720,
+        lineHeight: 24,
+      }
+    });
+    body.position.set(40, 250);
+    overlay.addChild(body);
+
+    const hint = new PIXI.Text({
+      text: '▼ Click to continue',
+      style: {
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+        fontSize: 12,
+        fill: 0x8b8b96,
+      }
+    });
+    hint.position.set(620, 560);
+    overlay.addChild(hint);
+
+    this.uiContainer.addChild(overlay);
+    this.flashbackOverlay = overlay;
+    this.state.isWaitingForInput = true;
+    this.state.history.push(`Flashback: ${payload.title || ''}`);
+    this.events.onFlashback?.(payload.title || '', payload.text || '');
+  }
+
+  public hideFlashback(): void {
+    if (this.flashbackOverlay) {
+      this.uiContainer.removeChild(this.flashbackOverlay);
+      this.flashbackOverlay.destroy();
+      this.flashbackOverlay = null;
+    }
+  }
+
+  public jumpToScene(sceneId: string): void {
+    this.pendingJumpSceneId = sceneId;
+  }
+
+  public runScript(code: string, label: string): RunScriptResult {
+    const result = RuntimeScriptSandbox.run(code, {
+      getVariable: (id) => this.state.variables[id],
+      setVariable: (id, value) => {
+        this.state.variables[id] = value as VariableValue;
+        this.state.history.push(`Script set '${id}' -> ${JSON.stringify(value)}`);
+      },
+      log: (message) => {
+        this.state.history.push(`[script:${label}] ${message}`);
+      },
+      jumpToScene: (sceneId) => {
+        this.state.history.push(`[script:${label}] jump -> ${sceneId}`);
+      },
+    });
+
+    return { jumpToSceneId: result.jumpToSceneId };
+  }
+
+  public log(message: string): void {
+    this.state.history.push(message);
+  }
+
+  public advance(): void {
+    this.handleAdvance();
+  }
+
+  // ---- missing capability state ------------------------------------------
+
+  private handleMissingCapability(block: StoryBlock, message: string): void {
+    const type = block.type === 'plugin' ? (block as PluginBlock).pluginType : block.type;
+    this.clearChoices();
+    this.dialogueBox.visible = false;
+    this.hideFlashback();
+    this.stopTypewriter();
+    this.state.isWaitingForInput = true;
+    this.state.isShowingChoices = false;
+    this.state.history.push(`Missing capability: ${message}`);
+    this.showMissingOverlay(type, message);
+    this.events.onPluginMissing?.(type, message);
+  }
+
+  private showMissingOverlay(type: string, message: string): void {
+    this.hideMissingOverlay();
+    const overlay = new PIXI.Container();
+
+    const bg = new PIXI.Graphics();
+    bg.rect(0, 0, 800, 600);
+    bg.fill({ color: 0x141418, alpha: 0.96 });
+    overlay.addChild(bg);
+
+    const title = new PIXI.Text({
+      text: `Missing capability: ${type}`,
+      style: {
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+        fontSize: 20,
+        fontWeight: 'bold',
+        fill: 0xf59e0b,
+      }
+    });
+    title.position.set(40, 210);
+    overlay.addChild(title);
+
+    const body = new PIXI.Text({
+      text: `${message}\n\nClick to skip this block.`,
+      style: {
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+        fontSize: 14,
+        fill: 0xd4d4d8,
+        wordWrap: true,
+        wordWrapWidth: 720,
+        lineHeight: 22,
+      }
+    });
+    body.position.set(40, 260);
+    overlay.addChild(body);
+
+    this.uiContainer.addChild(overlay);
+    this.missingOverlay = overlay;
+  }
+
+  private hideMissingOverlay(): void {
+    if (this.missingOverlay) {
+      this.uiContainer.removeChild(this.missingOverlay);
+      this.missingOverlay.destroy();
+      this.missingOverlay = null;
+    }
+  }
+
+  private stopTypewriter(): void {
+    if (this.typewriterInterval) {
+      clearInterval(this.typewriterInterval);
+      this.typewriterInterval = null;
+    }
+    this.isTypewriterComplete = true;
+  }
+
+  // ---- playback helpers ---------------------------------------------------
+
+  private finishTypewriter() {
+    if (this.typewriterInterval) {
+      clearInterval(this.typewriterInterval);
+      this.typewriterInterval = null;
+    }
+    this.displayedText = this.targetText;
+    this.dialogueText.text = this.displayedText;
+    this.isTypewriterComplete = true;
+    this.continuePrompt.visible = true;
+  }
+
+  public handleAdvance() {
+    if (!this.state.isWaitingForInput || this.state.isShowingChoices) return;
+
+    if (!this.isTypewriterComplete) {
+      // Instant skip to complete text
+      this.finishTypewriter();
+      return;
+    }
+
+    // Advance to next block
+    this.state.isWaitingForInput = false;
+    this.continuePrompt.visible = false;
+    this.state.currentBlockIndex++;
+    this.processCurrentBlock();
   }
 
   private selectChoice(optionText: string, destinationSceneId: ID | null) {
     this.state.history.push(`Selected: "${optionText}"`);
     this.clearChoices();
     this.state.isShowingChoices = false;
+    this.state.isWaitingForInput = false;
 
     if (destinationSceneId && this.story?.scenes[destinationSceneId]) {
       this.goToScene(destinationSceneId);
@@ -566,6 +734,34 @@ export class PixiVisualNovelEngine {
 
   public getState(): EngineState {
     return { ...this.state };
+  }
+
+  /** Serializable snapshot for web/cloud save persistence (no runtime-only data). */
+  public getSaveData(): { currentSceneId: string; currentBlockIndex: number; variables: Record<string, VariableValue> } {
+    return {
+      currentSceneId: this.state.currentSceneId || '',
+      currentBlockIndex: this.state.currentBlockIndex,
+      variables: { ...this.state.variables },
+    };
+  }
+
+  /** Restore a previously saved snapshot (from getSaveData) and resume playing. */
+  public async restoreState(save: { currentSceneId: string; currentBlockIndex: number; variables: Record<string, VariableValue> }): Promise<void> {
+    await this.initPromise;
+    if (!this.story) throw new Error('No story loaded.');
+    if (!this.story.scenes[save.currentSceneId]) throw new Error(`Saved scene '${save.currentSceneId}' no longer exists.`);
+    this.state.variables = { ...save.variables };
+    this.state.currentSceneId = save.currentSceneId;
+    this.state.currentBlockIndex = Math.min(Math.max(save.currentBlockIndex, 0), this.story.scenes[save.currentSceneId].blocks.length);
+    this.state.isWaitingForInput = false;
+    this.state.isShowingChoices = false;
+    this.clearChoices();
+    this.hideFlashback();
+    this.hideMissingOverlay();
+    await this.renderBackground(this.story.scenes[save.currentSceneId].background?.assetId || null);
+    this.events.onSceneChange?.(save.currentSceneId, this.story.scenes[save.currentSceneId].title);
+    this.notifyState();
+    await this.processCurrentBlock();
   }
 
   public handleResize() {

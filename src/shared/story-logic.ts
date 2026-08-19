@@ -4,6 +4,7 @@ import type {
   CompoundCondition,
   ConditionExpression,
   DialogueBlock,
+  PluginBlock,
   ProjectIR,
   ScriptBlock,
   StoryBlock,
@@ -186,6 +187,10 @@ function blockToScriptLine(block: StoryBlock, project: ProjectIR): string[] {
     case "script": {
       const scriptBlock = block as ScriptBlock;
       return [`script ${scriptBlock.label}`, ...scriptBlock.code.split("\n").map((line) => `  ${line}`)];
+    }
+    case "plugin": {
+      const pluginBlock = block as PluginBlock;
+      return [`plugin ${pluginBlock.pluginType}${pluginBlock.label ? ` (${pluginBlock.label})` : ""}`];
     }
     default:
       return [`${block.type}`];

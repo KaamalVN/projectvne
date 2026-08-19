@@ -91,14 +91,27 @@ const migrateV1ToV2: MigrationFunction = (project: any) => {
   return migrated;
 };
 
+// Migration from version 2 to version 3 (adds the plugin block type)
+// v2 projects contain no plugin blocks, so this only bumps the schema version.
+const migrateV2ToV3: MigrationFunction = (project: any) => {
+  return {
+    ...project,
+    meta: {
+      ...project.meta,
+      schemaVersion: 3
+    }
+  };
+};
+
 // Map of migrations: from version -> to version
 const migrations: Record<number, MigrationFunction> = {
   1: migrateV0ToV1,
-  2: migrateV1ToV2
+  2: migrateV1ToV2,
+  3: migrateV2ToV3
 };
 
 export class MigrationRunner {
-  private static readonly CURRENT_SCHEMA_VERSION = 2;
+  private static readonly CURRENT_SCHEMA_VERSION = 3;
 
   /**
    * Migrate a project to the current schema version

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PixiVisualNovelEngine, EngineState } from "./runtime/engine";
 import {
   ProjectIR,
@@ -14,6 +14,7 @@ import {
   AddDialogueBlockCommand,
   AddChoiceBlockCommand,
   AddShowCharacterBlockCommand,
+  AddPluginBlockCommand,
   CreateCharacterCommand,
   CreateVariableCommand,
   CreateAssetCommand
@@ -24,9 +25,16 @@ import { StoryGraphCanvas } from "./components/StoryGraphCanvas";
 import { ProjectFlowGraph } from "./components/ProjectFlowGraph";
 import { ConditionEditor } from "./components/ConditionEditor";
 import { ProjectExporter } from "./export/exporter";
+import { validateWebConstraints, prepareWebExport, WebConstraint } from "./export/web-export";
+import { prepareAndroidExport } from "./export/android";
+import { prepareCloudBuildRequest, CloudBuildRequest } from "./export/cloud-build";
 import { AiPanel } from "./components/AiPanel";
 import { SettingsModal } from "./components/SettingsModal";
+import { PluginManager } from "./components/PluginManager";
+import { MarketplaceManager } from "./components/MarketplaceManager";
+import { PluginViewModelView } from "./components/PluginViewModel";
 import { useAiState } from "./ai/use-ai-state";
+import { createDefaultPluginHost, setPluginEnabled, PluginHost } from "./plugins";
 import type { IRCommand } from "./commands/command-types";
 
 import {
@@ -62,12 +70,24 @@ export default function App() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedNodeType, setSelectedNodeType] = useState<string | null>(null);
   const [selectedNodeData, setSelectedNodeData] = useState<any>(null);
-  const [inspectorTab, setInspectorTab] = useState<"inspector" | "problems" | "variables" | "conditions" | "debugger">("inspector");
+  const [inspectorTab, setInspectorTab] = useState<"inspector" | "problems" | "variables" | "conditions" | "debugger" | "plugins" | "marketplace">("inspector");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [showSettings, setShowSettings] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportWebReport, setExportWebReport] = useState<WebConstraint[] | null>(null);
+  const [cloudBuild, setCloudBuild] = useState<CloudBuildRequest | null>(null);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const aiState = useAiState();
   const { prefs, setPrefs, keys, loadKey, saveKey, storageMode } = aiState;
+
+  const [pluginsVersion, setPluginsVersion] = useState(0);
+  const pluginHost = useMemo<PluginHost>(() => createDefaultPluginHost(), [pluginsVersion]);
+  const [pluginBlockModal, setPluginBlockModal] = useState<{
+    blockType: string;
+    pluginId?: string;
+    title: string;
+    fields: Array<{ key: string; label: string; type: "string" | "number" | "boolean"; value: string }>;
+  } | null>(null);
 
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<PixiVisualNovelEngine | null>(null);
@@ -192,8 +212,8 @@ export default function App() {
   };
 
   useEffect(() => {
-    setProblems(ProblemsChecker.check(project));
-  }, [project]);
+    setProblems(ProblemsChecker.check(project, { unavailableBlockTypes: pluginHost.getUnavailableBlockTypes() }));
+  }, [project, pluginHost]);
 
   useEffect(() => {
     const container = canvasContainerRef.current;
@@ -212,8 +232,10 @@ export default function App() {
         onSceneChange: (_, title) => addLog("info", `Started scene: ${title}`),
         onStateChange: st => { if (!cancelled) setEngineState({ ...st }); },
         onChoice: (_, opts) => addLog("info", `Presented a choice with ${opts.length} option${opts.length === 1 ? "" : "s"}`),
-        onStoryEnd: () => addLog("info", "Reached the end of the scene.")
-      });
+        onStoryEnd: () => addLog("info", "Reached the end of the scene."),
+        onPluginMissing: (type, msg) => addLog("warn", `Missing capability (${type}): ${msg}`),
+        onFlashback: (title) => addLog("info", `Flashback: ${title}`)
+      }, pluginHost);
       engineRef.current = engine;
 
       (async () => {
@@ -239,7 +261,7 @@ export default function App() {
         engineRef.current = null;
       }
     };
-  }, [selectedSceneId]);
+  }, [selectedSceneId, pluginHost]);
 
   const executeCommand = (cmd: any): boolean => {
     const res = invoker.execute(cmd);
@@ -331,6 +353,54 @@ export default function App() {
     }
   };
 
+  const exportProjectId = () => (project.meta.id || project.meta.title || 'story');
+
+  const handleExportWeb = () => {
+    const constraints = validateWebConstraints(project);
+    const blocked = constraints.filter((c) => c.status === 'block');
+    setExportWebReport(constraints);
+    if (blocked.length > 0) {
+      addLog("error", `Web export blocked: ${blocked.map((c) => c.label).join(', ')}`);
+      return;
+    }
+    const payload = prepareWebExport(project, exportProjectId());
+    const blob = new Blob([payload.storyJson], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${exportProjectId()}-web-story.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    addLog("info", `Web export validated (${constraints.filter((c) => c.status === 'pass').length}/${constraints.length} checks pass) — story bundle downloaded. Host it with the Web export runtime.`);
+  };
+
+  const handleExportAndroid = () => {
+    const res = prepareAndroidExport(project, project.meta.title || 'story');
+    if (!res.ok || !res.scaffold) {
+      addLog("error", `Android export failed: ${res.error}`);
+      return;
+    }
+    const bundle = { projectId: res.scaffold.projectId, files: res.scaffold.files, permissions: res.scaffold.permissions, storageNote: res.scaffold.storageNote };
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${res.scaffold.packageName}-android.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    addLog("info", `Android export prepared: ${res.scaffold.packageName} (APK packaging needs the Android toolchain — see docs).`);
+  };
+
+  const handleCloudBuild = () => {
+    const res = prepareCloudBuildRequest(project, 'android');
+    if (!res.ok || !res.request) {
+      addLog("error", `Cloud build failed: ${res.error}`);
+      return;
+    }
+    setCloudBuild(res.request);
+    addLog("info", `Cloud build request ready (api v${res.request.apiVersion}, ~${res.request.estimatedCompute} compute units). Signing is handled by the cloud build service.`);
+  };
+
   const submitAddScene = () => {
     if (!newSceneTitle.trim()) return;
     executeCommand(new AddSceneCommand({ title: newSceneTitle, backgroundAssetId: null }));
@@ -365,6 +435,70 @@ export default function App() {
       sceneId: selectedSceneId, characterId: charBlockId, expression: charBlockExpr, position: charBlockPos
     }));
     setShowAddCharacterBlockModal(false);
+  };
+
+  const handleTogglePlugin = (id: string, enabled: boolean) => {
+    setPluginEnabled(id, enabled);
+    setPluginsVersion(v => v + 1);
+    addLog("info", enabled ? `Plugin '${id}' enabled` : `Plugin '${id}' disabled`);
+  };
+
+  const openPluginBlockModal = (blockType: string, pluginId: string) => {
+    if (!selectedSceneId) return;
+    const entry = pluginHost.nodeTypeFor(blockType);
+    if (!entry) return;
+    let defaults: Record<string, unknown> = {};
+    try { defaults = entry.def.createData(); } catch { defaults = {}; }
+    const fields: Array<{ key: string; label: string; type: "string" | "number" | "boolean"; value: string }> = [];
+    for (const [key, value] of Object.entries(defaults)) {
+      const label = key.charAt(0).toUpperCase() + key.slice(1);
+      if (typeof value === "string") fields.push({ key, label, type: "string", value });
+      else if (typeof value === "number") fields.push({ key, label, type: "number", value: String(value) });
+      else if (typeof value === "boolean") fields.push({ key, label, type: "boolean", value: value ? "true" : "false" });
+    }
+    setPluginBlockModal({ blockType, pluginId, title: entry.def.title, fields });
+  };
+
+  const submitAddPluginBlock = () => {
+    if (!selectedSceneId || !pluginBlockModal) return;
+    const data: Record<string, unknown> = {};
+    for (const field of pluginBlockModal.fields) {
+      if (field.type === "number") data[field.key] = Number(field.value) || 0;
+      else if (field.type === "boolean") data[field.key] = field.value === "true";
+      else data[field.key] = field.value;
+    }
+    executeCommand(new AddPluginBlockCommand({
+      sceneId: selectedSceneId,
+      pluginType: pluginBlockModal.blockType,
+      pluginId: pluginBlockModal.pluginId,
+      data,
+    }));
+    setPluginBlockModal(null);
+  };
+
+  const handlePluginImport = async (pluginId: string, importerId: string, file: File) => {
+    let fileText = "";
+    try {
+      fileText = await file.text();
+    } catch (err) {
+      addLog("error", `Couldn't read that file: ${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
+    const result = pluginHost.runImporter(pluginId, importerId, { fileName: file.name, fileText, project });
+    if (result.error) {
+      addLog("error", result.error);
+      return;
+    }
+    for (const log of result.logs || []) addLog("info", log);
+    let imported = 0;
+    for (const asset of result.assets || []) {
+      const ok = executeCommand(new CreateAssetCommand({
+        name: asset.name, type: asset.type, fileReference: asset.fileReference, tags: asset.tags
+      }));
+      if (ok) imported++;
+    }
+    if (imported === 0) addLog("error", "The importer produced no usable assets.");
+    else addLog("info", `Imported ${imported} asset${imported === 1 ? "" : "s"} via plugin.`);
   };
 
   const submitAddCharacter = () => {
@@ -582,7 +716,7 @@ export default function App() {
               <FolderOpen size={13}/>
               <input type="file" accept=".json" onChange={handleLoadProject} className="hidden"/>
             </label>
-            <button onClick={handleExportProject} className="p-1.5 hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] rounded-md transition-colors" title="Export for Windows"><Download size={13}/></button>
+            <button onClick={() => setShowExportModal(true)} className="p-1.5 hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] rounded-md transition-colors" title="Export…" data-testid="open-export"><Download size={13}/></button>
           </div>
 
           <div className="w-px h-4 bg-[var(--border-subtle)] mx-1" />
@@ -719,6 +853,23 @@ export default function App() {
                   <span>👤 Show Character</span><Plus size={10} className="text-[var(--text-ghost)]"/>
                 </button>
               </div>
+              {pluginHost.getNodeTypes().length > 0 && (
+                <div>
+                  <div className="text-[9px] font-bold uppercase tracking-widest text-[var(--text-ghost)] px-1 mb-1">Plugins</div>
+                  {pluginHost.getNodeTypes().map(({ pluginId, def }) => (
+                    <button
+                      key={def.blockType}
+                      data-testid={`node-library-${def.blockType}`}
+                      onClick={() => openPluginBlockModal(def.blockType, pluginId)}
+                      disabled={!selectedSceneId}
+                      title={selectedSceneId ? def.description : "Select a scene first"}
+                      className="w-full px-2 py-1 rounded-md bg-[var(--bg-card)] border border-[var(--border-subtle)] text-[var(--text-secondary)] flex items-center justify-between mb-0.5 hover:border-[var(--border-default)] hover:text-[var(--text-primary)] disabled:opacity-40 transition-all"
+                    >
+                      <span>{def.icon ? `${def.icon} ` : ""}{def.title}</span><Plus size={10} className="text-[var(--text-ghost)]"/>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </aside>
@@ -748,7 +899,7 @@ export default function App() {
                     <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]">
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] font-mono text-[var(--text-ghost)] bg-[var(--bg-elevated)] px-2 py-0.5 rounded-md">#{idx+1}</span>
-                        <span className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">{block.type}</span>
+                        <span className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">{block.type === "plugin" ? (block as any).pluginType : block.type}</span>
                       </div>
                       <span className="text-[9px] font-mono text-[var(--text-ghost)]">{block.id?.slice(-8) || ''}</span>
                     </div>
@@ -811,6 +962,31 @@ export default function App() {
                           </div>
                         </div>
                       )}
+                      {block.type === "plugin" && (() => {
+                        const pBlock = block as any;
+                        const entry = pluginHost.nodeTypeFor(pBlock.pluginType);
+                        if (!entry) {
+                          return (
+                            <div className="p-3 rounded-lg border border-[var(--amber-border)] bg-[var(--amber-dim)]">
+                              <div className="text-[11px] font-semibold text-[var(--amber-text)]">Missing capability: {pBlock.pluginType}</div>
+                              <div className="text-[10px] text-[var(--text-muted)] mt-1">This block needs a plugin that is currently disabled. Enable it in the Plugins panel.</div>
+                            </div>
+                          );
+                        }
+                        let vm = null;
+                        try {
+                          vm = entry.def.toViewModel({ data: pBlock.data }, project);
+                        } catch { vm = null; }
+                        return (
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-2 text-[11px] font-semibold text-[var(--text-primary)]">
+                              {entry.def.icon && <span>{entry.def.icon}</span>}
+                              <span>{entry.def.title}</span>
+                            </div>
+                            {vm ? <PluginViewModelView vm={vm} /> : <div className="text-[10px] text-[var(--text-ghost)]">No preview available.</div>}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 ))}
@@ -877,16 +1053,16 @@ export default function App() {
 
         {/* ===== RIGHT SIDEBAR ===== */}
         <aside className={`${project.ai?.enabled && aiPanelOpen ? "w-80" : "w-64"} bg-[var(--bg-panel)] border-l border-[var(--border-subtle)] flex flex-col shrink-0`}>
-          <div className="flex border-b border-[var(--border-subtle)] text-[11px]">
+          <div className="flex border-b border-[var(--border-subtle)] text-[11px] overflow-x-auto">
             {(project.ai?.enabled
-              ? (["inspector","problems","variables","conditions","debugger","ai"] as const)
-              : (["inspector","problems","variables","conditions","debugger"] as const)
+              ? (["inspector","problems","variables","conditions","debugger","plugins","marketplace","ai"] as const)
+              : (["inspector","problems","variables","conditions","debugger","plugins","marketplace"] as const)
             ).map(tab => {
-              const labels: Record<string,string> = { inspector:"Inspector", problems:`Problems (${problems.length})`, variables:"Variables", conditions:"Conditions", debugger:"Debugger", ai:"AI" };
+              const labels: Record<string,string> = { inspector:"Inspector", problems:`Problems (${problems.length})`, variables:"Variables", conditions:"Conditions", debugger:"Debugger", plugins:"Plugins", marketplace:"Marketplace", ai:"AI" };
               const active = tab === "ai" ? aiPanelOpen : inspectorTab === tab;
               return (
-                <button key={tab} data-testid={tab === "ai" ? "ai-tab" : undefined} onClick={() => { if (tab === "ai") setAiPanelOpen(true); else setInspectorTab(tab); }}
-                  className={`flex-1 py-2 text-center transition-colors font-semibold ${
+                <button key={tab} data-testid={tab === "ai" ? "ai-tab" : tab === "plugins" ? "plugins-tab" : tab === "marketplace" ? "marketplace-tab" : undefined} onClick={() => { if (tab === "ai") setAiPanelOpen(true); else setInspectorTab(tab); }}
+                  className={`flex-none px-2.5 py-2 text-center transition-colors font-semibold whitespace-nowrap ${
                     active ? "text-[var(--text-primary)] border-b-2 border-[var(--accent)] bg-[var(--bg-surface)]" : "text-[var(--text-ghost)] hover:text-[var(--text-secondary)]"
                   }`}>{labels[tab]}</button>
               );
@@ -921,6 +1097,29 @@ export default function App() {
                 </div>
                 {selectedNodeData ? (
                   <div className="space-y-2 p-2.5 bg-[var(--bg-surface)] rounded-lg border border-[var(--border-subtle)]">
+                    {selectedNodeData.type === "plugin" && (() => {
+                      const pBlock = selectedNodeData as any;
+                      const entry = pluginHost.nodeTypeFor(pBlock.pluginType);
+                      const label = entry?.def.title || pBlock.pluginType;
+                      let vm = null;
+                      if (entry) {
+                        try { vm = entry.def.toViewModel({ data: pBlock.data }, project); } catch { vm = null; }
+                      }
+                      return (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            {entry?.def.icon && <span>{entry.def.icon}</span>}
+                            <div>
+                              <div className="text-[11px] font-bold text-[var(--text-primary)]">{label}</div>
+                              <div className="text-[9px] font-mono text-[var(--text-ghost)]">{pBlock.pluginType}</div>
+                            </div>
+                          </div>
+                          {vm ? <PluginViewModelView vm={vm} /> : (
+                            <div className="text-[10px] text-[var(--text-ghost)]">No plugin installed for this block type.</div>
+                          )}
+                        </div>
+                      );
+                    })()}
                     {selectedNodeData.characterName && (
                       <div><label className="block text-[10px] text-[var(--text-muted)] mb-1">Speaker</label>
                         <div className="p-1.5 bg-[var(--bg-input)] rounded-md border border-[var(--border-subtle)] text-[var(--text-primary)] font-semibold">{selectedNodeData.characterName as string}</div></div>
@@ -1099,6 +1298,18 @@ export default function App() {
                 ))}
               </div>
             )}
+
+            {inspectorTab === "plugins" && (
+              <PluginManager host={pluginHost} project={project} onTogglePlugin={handleTogglePlugin} />
+            )}
+            {inspectorTab === "marketplace" && (
+              <MarketplaceManager
+                host={pluginHost}
+                project={project}
+                onTogglePlugin={handleTogglePlugin}
+                onInstalledChange={() => { setPluginsVersion(v => v + 1); addLog("info", "Marketplace changed. Plugin list refreshed."); }}
+              />
+            )}
             </>
             )}
           </div>
@@ -1244,9 +1455,64 @@ export default function App() {
           <div><label className="block text-[10px] text-[var(--text-muted)] mb-1">File Path</label>
             <input className={inputCls + " font-mono"} value={assetPath} onChange={e=>setAssetPath(e.target.value)}/>
           </div>
+          {pluginHost.getImporters().length > 0 && (
+            <div className="border-t border-[var(--border-subtle)] pt-2.5">
+              <div className="text-[10px] text-[var(--text-muted)] mb-1.5">Import via plugin</div>
+              <div className="space-y-1.5">
+                {pluginHost.getImporters().map(({ id, pluginId, def }) => (
+                  <label key={id} className="flex flex-col gap-1 p-2 bg-[var(--bg-surface)] rounded-md border border-[var(--border-subtle)] cursor-pointer">
+                    <span className="text-[11px] text-[var(--text-secondary)]">{def.title}</span>
+                    {def.description && <span className="text-[9px] text-[var(--text-muted)]">{def.description}</span>}
+                    <input
+                      type="file"
+                      data-testid={`importer-${id}`}
+                      accept={def.accepts.join(",")}
+                      className="text-[10px] text-[var(--text-muted)] cursor-pointer"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handlePluginImport(pluginId, id, f);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="flex justify-end gap-2 mt-1">
             <button onClick={()=>setShowNewAssetModal(false)} className={btnCancel}>Cancel</button>
             <button onClick={()=>{ if(!assetName.trim()) return; executeCommand(new CreateAssetCommand({name:assetName,type:"background",fileReference:assetPath})); setShowNewAssetModal(false); }} className={btnPrimary}>Save</button>
+          </div>
+        </div></div>
+      )}
+
+      {pluginBlockModal && (
+        <div className={modalWrap}><div className={modalBox}>
+          <h3 className="text-sm font-bold text-[var(--text-primary)]">Add {pluginBlockModal.title}</h3>
+          <div className="text-[10px] text-[var(--text-muted)] -mt-1">A plugin node from the "{pluginBlockModal.pluginId}" plugin.</div>
+          <div className="space-y-2">
+            {pluginBlockModal.fields.map((field) => (
+              <div key={field.key}>
+                <label className="block text-[10px] text-[var(--text-muted)] mb-1">{field.label}</label>
+                {field.type === "boolean" ? (
+                  <input type="checkbox" checked={field.value === "true"} className="accent-[var(--accent)]"
+                    onChange={(e) => setPluginBlockModal(m => m ? { ...m, fields: m.fields.map(f => f.key === field.key ? { ...f, value: e.target.checked ? "true" : "false" } : f) } : m)} />
+                ) : field.key === "text" || field.key === "description" ? (
+                  <textarea className={inputCls + " resize-none"} rows={3} value={field.value}
+                    onChange={(e) => setPluginBlockModal(m => m ? { ...m, fields: m.fields.map(f => f.key === field.key ? { ...f, value: e.target.value } : f) } : m)} />
+                ) : field.type === "number" ? (
+                  <input type="number" className={inputCls} value={field.value}
+                    onChange={(e) => setPluginBlockModal(m => m ? { ...m, fields: m.fields.map(f => f.key === field.key ? { ...f, value: e.target.value } : f) } : m)} />
+                ) : (
+                  <input className={inputCls} value={field.value}
+                    onChange={(e) => setPluginBlockModal(m => m ? { ...m, fields: m.fields.map(f => f.key === field.key ? { ...f, value: e.target.value } : f) } : m)} />
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-end gap-2 mt-1">
+            <button onClick={()=>setPluginBlockModal(null)} className={btnCancel}>Cancel</button>
+            <button onClick={submitAddPluginBlock} className={btnPrimary}>Add Node</button>
           </div>
         </div></div>
       )}
@@ -1267,6 +1533,55 @@ export default function App() {
             storageMode,
           }}
         />
+      )}
+
+      {showExportModal && (
+        <div className={modalWrap}><div className={modalBox}>
+          <h3 className="text-sm font-bold text-[var(--text-primary)]">Export</h3>
+          <div className="text-[10px] text-[var(--text-muted)] -mt-1">Choose an export target. Export runs the same runtime the editor preview uses, so what you preview is what players get.</div>
+          <div className="space-y-2">
+            <button onClick={handleExportProject} data-testid="export-desktop" className="w-full text-left p-2.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-[var(--border-default)]">
+              <div className="text-[11px] font-semibold text-[var(--text-primary)]">Desktop (Windows / macOS / Linux)</div>
+              <div className="text-[9px] text-[var(--text-muted)]">One project file wrapped for all three desktop shells.</div>
+            </button>
+            <button onClick={handleExportWeb} data-testid="export-web" className="w-full text-left p-2.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-[var(--border-default)]">
+              <div className="text-[11px] font-semibold text-[var(--text-primary)]">Web</div>
+              <div className="text-[9px] text-[var(--text-muted)]">Static bundle with persistent saves. Constraints are validated before export.</div>
+            </button>
+            <button onClick={handleExportAndroid} data-testid="export-android" className="w-full text-left p-2.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-[var(--border-default)]">
+              <div className="text-[11px] font-semibold text-[var(--text-primary)]">Android</div>
+              <div className="text-[9px] text-[var(--text-muted)]">Tauri Android scaffold. Final APK needs the Android toolchain (documented).</div>
+            </button>
+            <button onClick={handleCloudBuild} data-testid="export-cloud" className="w-full text-left p-2.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-[var(--border-default)]">
+              <div className="text-[11px] font-semibold text-[var(--text-primary)]">Cloud Build</div>
+              <div className="text-[9px] text-[var(--text-muted)]">Meters compute and handles signing for you (service contract documented).</div>
+            </button>
+          </div>
+
+          {exportWebReport && (
+            <div className="space-y-1.5 border-t border-[var(--border-subtle)] pt-2.5">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-ghost)]">Web export constraints</div>
+              {exportWebReport.map((c) => (
+                <div key={c.id} className="text-[10px] flex gap-2">
+                  <span className={c.status === "pass" ? "text-[var(--green-text)]" : c.status === "warn" ? "text-[var(--amber-text)]" : "text-[var(--error-text)]"}>{c.status === "pass" ? "✓" : c.status === "warn" ? "▲" : "✕"}</span>
+                  <span className="text-[var(--text-muted)]">{c.label}: {c.detail}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {cloudBuild && (
+            <div className="space-y-1 border-t border-[var(--border-subtle)] pt-2.5">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-ghost)]">Cloud build request</div>
+              <div className="text-[10px] text-[var(--text-muted)]">Target: {cloudBuild.target} · hash {cloudBuild.storyHash} · ~{cloudBuild.estimatedCompute} compute units (metered).</div>
+              <div className="text-[10px] text-[var(--text-muted)]">Signing is handled by the cloud build service. See docs/cloud-services.md for the contract.</div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 mt-1">
+            <button onClick={() => { setShowExportModal(false); setExportWebReport(null); setCloudBuild(null); }} className={btnCancel}>Close</button>
+          </div>
+        </div></div>
       )}
 
       {newProjectModal}

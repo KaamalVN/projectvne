@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ProjectVNE — Web Export</title>
+    <style>
+        html,body{margin:0;height:100%;background:#141418;color:#ddd;font-family:system-ui,sans-serif}
+        #game-container{position:fixed;inset:0}
+        #saveload{position:fixed;top:10px;right:10px;display:flex;gap:6px;z-index:10}
+        #saveload button{background:#222228;color:#ddd;border:1px solid #3a3a46;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer}
+        #saveload button:hover{background:#2a2a32}
+        #notice{position:fixed;bottom:10px;left:10px;z-index:10;font-size:11px;color:#caa05a}
+    </style>
+</head>
+<body>
+    <div id="game-container"></div>
+    <div id="saveload"><button id="btn-save" type="button">Save</button><button id="btn-load" type="button">Continue</button></div>
+    <div id="notice"></div>
+    <script type="module" src="/src/runtime/web-main.ts"></script>
+</body>
+</html>

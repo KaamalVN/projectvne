@@ -1,7 +1,7 @@
 import type { IRCommand } from '../commands/command-types';
 import type { ProjectIR } from '../shared/types';
 
-export type AiProviderId = 'anthropic' | 'openai' | 'google' | 'ollama' | 'mock';
+export type AiProviderId = 'anthropic' | 'openai' | 'google' | 'ollama' | 'mock' | 'cloud';
 
 export type AiScope = 'scene' | 'project';
 

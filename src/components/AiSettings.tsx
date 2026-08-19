@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getAdapter, getAdapterList } from '../ai/adapters';
 import type { AiPreferences } from '../ai/preferences';
+import { loadCredits, optIntoCloudCredits, COST_PER_CLOUD_REQUEST } from '../ai/credits';
 
 export interface AiSettingsProps {
   enabled: boolean;
@@ -21,6 +22,9 @@ export function AiSettings({ enabled, onToggleEnabled, prefs, setPrefs, keys, lo
   const adapter = getAdapter(prefs.providerId);
   const [keyDraft, setKeyDraft] = useState('');
   const [saved, setSaved] = useState(false);
+  const [credits, setCredits] = useState(loadCredits());
+
+  const refreshCredits = () => setCredits(loadCredits());
 
   useEffect(() => {
     if (adapter.requiresKey && !keys[prefs.providerId]) {
@@ -114,6 +118,25 @@ export function AiSettings({ enabled, onToggleEnabled, prefs, setPrefs, keys, lo
           {prefs.providerId === 'mock' && (
             <div className="text-[10px] text-[var(--text-muted)] bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-md p-2">
               Offline demo provider — returns deterministic suggestions so you can try the review workflow without a network or API key.
+            </div>
+          )}
+
+          {prefs.providerId === 'cloud' && (
+            <div className="text-[10px] text-[var(--text-muted)] bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-md p-2 space-y-1.5">
+              <div className="font-semibold text-[var(--text-primary)]">ProjectVNE Cloud — metered AI</div>
+              <div>Balance: <span data-testid="cloud-credit-balance">{credits.balance}</span> credit{credits.balance === 1 ? '' : 's'} · {COST_PER_CLOUD_REQUEST} credit per request.</div>
+              {!credits.optedIn && (
+                <button
+                  data-testid="cloud-opt-in"
+                  onClick={() => { optIntoCloudCredits(100); refreshCredits(); }}
+                  className="px-2.5 py-1 rounded-md text-[10px] font-semibold border border-[var(--border-default)] bg-[var(--bg-card)] hover:bg-[var(--bg-elevated)]"
+                >
+                  Opt in and add 100 demo credits
+                </button>
+              )}
+              <div className="text-[9px] text-[var(--text-ghost)]">
+                Bring-your-own-key providers (Anthropic, OpenAI, Google, Ollama) stay free permanently. Cloud usage is metered and optional.
+              </div>
             </div>
           )}
         </>

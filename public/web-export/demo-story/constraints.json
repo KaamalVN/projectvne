@@ -1,0 +1,34 @@
+{
+  "constraints": [
+    {
+      "id": "asset-size",
+      "label": "Per-asset size (4 MB max)",
+      "status": "pass",
+      "detail": "All 3 asset(s) are within the 4 MB per-asset limit."
+    },
+    {
+      "id": "asset-total",
+      "label": "Total bundle size (50 MB max)",
+      "status": "pass",
+      "detail": "Total bundle is 0 MB."
+    },
+    {
+      "id": "codecs",
+      "label": "Audio codec compatibility",
+      "status": "pass",
+      "detail": "Audio assets use browser-compatible codecs (MP3/OGG/WAV/M4A)."
+    },
+    {
+      "id": "saves",
+      "label": "Save persistence",
+      "status": "warn",
+      "detail": "Save storage is verified in the browser at runtime. The exported page persists saves across reloads via browser storage."
+    },
+    {
+      "id": "background-loading",
+      "label": "Background loading",
+      "status": "pass",
+      "detail": "Every scene background is a bundled asset and loads eagerly at scene start."
+    }
+  ]
+}

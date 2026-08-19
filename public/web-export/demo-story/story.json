@@ -1,0 +1,189 @@
+{
+  "$schema": "./src/shared/types/ir.schema.json",
+  "meta": {
+    "schemaVersion": 3,
+    "id": "project-demo-001",
+    "title": "Demo Visual Novel",
+    "createdAt": "2026-08-15T10:00:00.000Z",
+    "modifiedAt": "2026-08-15T10:00:00.000Z"
+  },
+  "characters": {
+    "char-alex": {
+      "id": "char-alex",
+      "name": "Alex",
+      "portraits": {
+        "happy": {
+          "assetId": "asset-alex-happy"
+        },
+        "sad": {
+          "assetId": "asset-alex-sad"
+        }
+      },
+      "defaultPosition": "center"
+    }
+  },
+  "assets": {
+    "asset-bg-room": {
+      "id": "asset-bg-room",
+      "name": "Room Background",
+      "type": "background",
+      "tags": [
+        "indoor",
+        "room"
+      ],
+      "variants": {},
+      "fileReference": "web-export/demo-story/assets/Room Background.png"
+    },
+    "asset-alex-happy": {
+      "id": "asset-alex-happy",
+      "name": "Alex Happy Portrait",
+      "type": "portrait",
+      "tags": [
+        "character",
+        "alex",
+        "happy"
+      ],
+      "variants": {},
+      "fileReference": "web-export/demo-story/assets/Alex Happy Portrait.png"
+    },
+    "asset-alex-sad": {
+      "id": "asset-alex-sad",
+      "name": "Alex Sad Portrait",
+      "type": "portrait",
+      "tags": [
+        "character",
+        "alex",
+        "sad"
+      ],
+      "variants": {},
+      "fileReference": "web-export/demo-story/assets/Alex Sad Portrait.png"
+    }
+  },
+  "variables": {
+    "var-relationship-alex": {
+      "id": "var-relationship-alex",
+      "name": "Relationship with Alex",
+      "type": "number",
+      "defaultValue": 0,
+      "displayName": "Alex Relationship",
+      "description": "Tracks the relationship level with Alex (0-10)"
+    }
+  },
+  "scenes": {
+    "scene-intro": {
+      "id": "scene-intro",
+      "title": "Introduction",
+      "background": {
+        "assetId": "asset-bg-room"
+      },
+      "blocks": [
+        {
+          "id": "block-show-alex",
+          "type": "showCharacter",
+          "characterId": "char-alex",
+          "expression": "happy",
+          "position": "center"
+        },
+        {
+          "id": "block-dialogue-1",
+          "type": "dialogue",
+          "characterId": "char-alex",
+          "text": "Hello! Welcome to our story.",
+          "expression": "happy"
+        },
+        {
+          "id": "block-choice",
+          "type": "choice",
+          "prompt": "How do you respond?",
+          "options": [
+            {
+              "id": "choice-friendly",
+              "text": "I'm happy to meet you!",
+              "destinationSceneId": "scene-friendly",
+              "conditionId": null
+            },
+            {
+              "id": "choice-curious",
+              "text": "Tell me more about yourself.",
+              "destinationSceneId": "scene-curious",
+              "conditionId": null
+            }
+          ]
+        }
+      ]
+    },
+    "scene-friendly": {
+      "id": "scene-friendly",
+      "title": "Friendly Response",
+      "background": {
+        "assetId": "asset-bg-room"
+      },
+      "blocks": [
+        {
+          "id": "block-dialogue-friendly",
+          "type": "dialogue",
+          "characterId": "char-alex",
+          "text": "That's great to hear! I'm glad we're getting along.",
+          "expression": "happy"
+        },
+        {
+          "id": "block-set-var",
+          "type": "setVariable",
+          "variableId": "var-relationship-alex",
+          "operation": "add",
+          "value": 2
+        }
+      ]
+    },
+    "scene-curious": {
+      "id": "scene-curious",
+      "title": "Curious Response",
+      "background": {
+        "assetId": "asset-bg-room"
+      },
+      "blocks": [
+        {
+          "id": "block-dialogue-curious",
+          "type": "dialogue",
+          "characterId": "char-alex",
+          "text": "Well, I enjoy long walks and talking about stories.",
+          "expression": "happy"
+        },
+        {
+          "id": "block-set-var-2",
+          "type": "setVariable",
+          "variableId": "var-relationship-alex",
+          "operation": "add",
+          "value": 1
+        }
+      ]
+    }
+  },
+  "flow": {
+    "entrySceneId": "scene-intro",
+    "connections": [
+      {
+        "fromSceneId": "scene-intro",
+        "toSceneId": "scene-friendly"
+      },
+      {
+        "fromSceneId": "scene-intro",
+        "toSceneId": "scene-curious"
+      }
+    ]
+  },
+  "ui": {
+    "theme": "auto",
+    "dialogueBoxStyle": "classic",
+    "choicePresentation": "vertical"
+  },
+  "localization": {
+    "defaultLocale": "en",
+    "locales": {}
+  },
+  "exportProfiles": {},
+  "conditions": {},
+  "ai": {
+    "enabled": false
+  }
+}

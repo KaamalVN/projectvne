@@ -1,4 +1,5 @@
 import type { AiAdapter, AiProviderId, AiToolCall } from './types';
+import { spendCredits, COST_PER_CLOUD_REQUEST, loadCredits } from './credits';
 
 // Every provider implements the same contract. New providers are added to the
 // registry below — no editor code, command pipeline, or UI change required.
@@ -196,12 +197,61 @@ const mockAdapter: AiAdapter = {
   },
 };
 
+// ProjectVNE Cloud: optional, metered, opt-in cloud AI. It appears as one more
+// entry in the same provider picker (§4.1) rather than a separately-styled
+// upsell. "Bring your own key" providers remain free; cloud usage meters
+// credits. The actual inference endpoint is a cloud service (contract in
+// docs/cloud-services.md); the offline mock below produces the same reviewable
+// proposals so the workflow is testable, but meters a credit per request.
+const cloudAdapter: AiAdapter = {
+  id: 'cloud',
+  label: 'ProjectVNE Cloud (metered)',
+  requiresKey: false,
+  defaultModel: 'cloud-v1',
+  modelHint: 'metered cloud inference, no key needed',
+  async send(req) {
+    const remaining = spendCredits(COST_PER_CLOUD_REQUEST);
+    if (remaining === null) {
+      const balance = loadCredits().balance;
+      throw new Error(
+        balance > 0
+          ? `Not enough ProjectVNE Cloud credits (balance ${balance}). Add credits, or switch to a bring-your-own-key provider which stays free.`
+          : 'No ProjectVNE Cloud credits. Opt in and add credits in AI settings, or use a bring-your-own-key provider which stays free.',
+      );
+    }
+    // Mirror the mock provider's deterministic proposal logic so the workflow is
+    // fully testable offline. A real deployment would call the cloud inference
+    // endpoint here.
+    const last = req.messages[req.messages.length - 1]?.content?.toLowerCase() || '';
+    const ctx = req.context;
+    const sceneId = ctx.sceneId || Object.keys(ctx.project.scenes)[0] || null;
+    const firstChar = Object.keys(ctx.project.characters)[0] || null;
+    let toolCalls: AiToolCall[] = [];
+    if (last.includes('continuity')) {
+      toolCalls = [{ id: 'cloud-continuity', name: 'check_continuity', args: {} }];
+    } else if (last.includes('branch') || last.includes('reachable')) {
+      toolCalls = [{ id: 'cloud-branch', name: 'explain_branch', args: { sceneId } }];
+    } else {
+      toolCalls = [{
+        id: 'cloud-dialogue',
+        name: 'add_dialogue_block',
+        args: { sceneId, characterId: firstChar, text: 'A cloud-drafted line of dialogue.', insertAtIndex: 0 },
+      }];
+    }
+    return {
+      text: 'Cloud draft ready. Review each card and accept or reject it before it is applied. This request cost 1 credit.',
+      toolCalls,
+    };
+  },
+};
+
 export const adapters: AiAdapter[] = [
   anthropicAdapter,
   openAiAdapter,
   googleAdapter,
   ollamaAdapter,
   mockAdapter,
+  cloudAdapter,
 ];
 
 export function getAdapter(providerId: AiProviderId): AiAdapter {

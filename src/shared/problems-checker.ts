@@ -11,8 +11,12 @@ export interface StoryProblem {
 }
 
 export class ProblemsChecker {
-  public static check(project: ProjectIR): StoryProblem[] {
+  public static check(
+    project: ProjectIR,
+    options?: { unavailableBlockTypes?: Record<string, string> },
+  ): StoryProblem[] {
     const problems: StoryProblem[] = [];
+    const unavailable = options?.unavailableBlockTypes || {};
 
     // 1. Check entry scene
     if (!project.flow.entrySceneId || !project.scenes[project.flow.entrySceneId]) {
@@ -51,6 +55,21 @@ export class ProblemsChecker {
 
       // Check blocks
       scene.blocks.forEach((block, idx) => {
+        // A block whose handling plugin is disabled is a clear "missing
+        // capability" state, not a crash.
+        const dispatchType = block.type === 'plugin' ? (block as any).pluginType : block.type;
+        const unavailablePluginId = unavailable[dispatchType];
+        if (unavailablePluginId) {
+          problems.push({
+            id: `missing-capability-${sceneId}-${block.id}`,
+            severity: 'warning',
+            sceneId,
+            blockId: block.id,
+            message: `Block #${idx + 1} in "${scene.title}" needs the '${unavailablePluginId}' plugin, which is disabled.`,
+            fixSuggestion: `Enable the '${unavailablePluginId}' plugin in the Plugins panel, or remove this block.`
+          });
+        }
+
         if (block.type === 'dialogue') {
           if (block.characterId && !project.characters[block.characterId]) {
             problems.push({

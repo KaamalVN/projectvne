@@ -1,7 +1,7 @@
 // Shared TypeScript types for the IR (Intermediate Representation)
 // This file is shared between the editor, runtime, validator, and exporter
 
-export type SchemaVersion = 2;
+export type SchemaVersion = 3;
 
 // Unique identifiers - string with ID alias
 export type ID = string;
@@ -85,7 +85,8 @@ export type StoryBlock =
   | SetVariableBlock
   | PlayAudioBlock
   | TransitionBlock
-  | CommentBlock;
+  | CommentBlock
+  | PluginBlock;
 
 export type BlockType = StoryBlock['type'];
 
@@ -180,6 +181,17 @@ export type TransitionType = 'fade' | 'slide' | 'instant' | 'crossfade';
 export interface CommentBlock extends BaseBlock {
   type: 'comment';
   text: string;
+}
+
+// Plugin block (v3): a block contributed by a plugin node type. The IR
+// discriminator stays stable ('plugin'); the plugin-specific type lives in
+// `pluginType`, and the plugin's data payload lives in `data`.
+export interface PluginBlock extends IRObject {
+  type: 'plugin';
+  pluginType: string;
+  label?: string;
+  pluginId?: string;
+  data: Record<string, unknown>;
 }
 
 // Flow (project-level scene connections)
@@ -279,7 +291,7 @@ export function createEmptyProject(): ProjectIR {
 
   return {
     meta: {
-      schemaVersion: 2,
+      schemaVersion: 3,
       id: projectId,
       title: 'Untitled Project',
       createdAt: now,

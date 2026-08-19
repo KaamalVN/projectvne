@@ -6,3 +6,4 @@ export * from './keychain';
 export * from './preferences';
 export * from './tools';
 export * from './use-ai-state';
+export * from './credits';

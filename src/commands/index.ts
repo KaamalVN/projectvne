@@ -8,3 +8,4 @@ export * from './add-show-character-block-command';
 export * from './create-character-command';
 export * from './create-variable-command';
 export * from './create-asset-command';
+export * from './add-plugin-block-command';
