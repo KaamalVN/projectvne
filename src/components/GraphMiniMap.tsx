@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   useStore,
   useNodes,
@@ -7,6 +7,7 @@ import {
   type Node,
   type Edge,
 } from "@xyflow/react";
+import { Map as MapIcon, Minus } from "lucide-react";
 
 interface MiniStyle {
   border: string;
@@ -64,6 +65,7 @@ export function GraphMiniMap({ width = 220, height = 164 }: { width?: number; he
   const rfWidth = useStore((s) => s.width);
   const rfHeight = useStore((s) => s.height);
   const { setCenter } = useReactFlow();
+  const [collapsed, setCollapsed] = useState(true);
 
   const layout = useMemo(() => {
     if (!nodes.length) return null;
@@ -90,6 +92,35 @@ export function GraphMiniMap({ width = 220, height = 164 }: { width?: number; he
     const offsetY = (height - gh * s) / 2 - minY * s;
     return { s, offsetX, offsetY };
   }, [nodes, width, height]);
+
+  if (collapsed) {
+    return (
+      <button
+        title="Show map overview"
+        aria-label="Show map overview"
+        onClick={() => setCollapsed(false)}
+        style={{
+          position: "absolute",
+          right: 10,
+          bottom: 10,
+          width: 36,
+          height: 36,
+          borderRadius: 8,
+          background: "var(--bg-panel)",
+          border: "1px solid var(--border-default)",
+          color: "var(--text-muted)",
+          zIndex: 5,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          boxShadow: "var(--shadow-md)",
+          cursor: "pointer",
+        }}
+      >
+        <MapIcon size={16} />
+      </button>
+    );
+  }
 
   if (!layout) return null;
   const { s, offsetX, offsetY } = layout;
@@ -131,6 +162,32 @@ export function GraphMiniMap({ width = 220, height = 164 }: { width?: number; he
       }}
       title="Click to navigate"
     >
+      <div style={{ position: "absolute", top: 4, left: 6, fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-ghost)", pointerEvents: "none", zIndex: 6 }}>
+        Map
+      </div>
+      <button
+        title="Hide map overview"
+        aria-label="Hide map overview"
+        onClick={(e) => { e.stopPropagation(); setCollapsed(true); }}
+        style={{
+          position: "absolute",
+          top: 4,
+          right: 4,
+          width: 18,
+          height: 18,
+          borderRadius: 4,
+          background: "var(--bg-elevated)",
+          border: "1px solid var(--border-subtle)",
+          color: "var(--text-muted)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "pointer",
+          zIndex: 6,
+        }}
+      >
+        <Minus size={11} />
+      </button>
       <svg width={width} height={height} style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
         {edges.map((e: Edge) => {
           const src = nodeMap.get(e.source);

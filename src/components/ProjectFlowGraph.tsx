@@ -1,8 +1,7 @@
-import React, { useMemo, useEffect } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import {
   ReactFlow,
   Background,
-  Controls,
   Node,
   Edge,
   BackgroundVariant,
@@ -12,6 +11,7 @@ import {
 import { Handle, Position } from '@xyflow/react';
 import { ProjectIR, ID } from '../shared/types';
 import { GraphMiniMap } from './GraphMiniMap';
+import { CanvasControls } from './CanvasControls';
 import { Play, CheckCircle2, Split } from 'lucide-react';
 
 const SceneCardNode = ({ data }: { data: any }) => {
@@ -69,6 +69,7 @@ const ProjectFlowGraphContent: React.FC<ProjectFlowGraphProps> = ({
   onSelectScene
 }) => {
   const { fitView } = useReactFlow();
+  const [interactive, setInteractive] = useState(true);
 
   const { nodes, edges } = useMemo(() => {
     const generatedNodes: Node[] = [];
@@ -189,6 +190,9 @@ const ProjectFlowGraphContent: React.FC<ProjectFlowGraphProps> = ({
         fitView
         minZoom={0.1}
         maxZoom={2}
+        nodesDraggable={interactive}
+        nodesConnectable={interactive}
+        elementsSelectable={interactive}
         onNodeClick={(_, node) => {
           onSelectScene?.(node.id);
         }}
@@ -199,7 +203,7 @@ const ProjectFlowGraphContent: React.FC<ProjectFlowGraphProps> = ({
         }}
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1.2} color="#3a3a46" />
-        <Controls />
+        <CanvasControls interactive={interactive} setInteractive={setInteractive} />
         <GraphMiniMap />
       </ReactFlow>
     </div>

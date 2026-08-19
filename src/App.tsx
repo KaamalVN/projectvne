@@ -56,7 +56,7 @@ export default function App() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedNodeType, setSelectedNodeType] = useState<string | null>(null);
   const [selectedNodeData, setSelectedNodeData] = useState<any>(null);
-  const [inspectorTab, setInspectorTab] = useState<"inspector" | "properties" | "variables" | "conditions" | "debugger">("inspector");
+  const [inspectorTab, setInspectorTab] = useState<"inspector" | "problems" | "variables" | "conditions" | "debugger">("inspector");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
 
   const canvasContainerRef = useRef<HTMLDivElement>(null);
@@ -80,6 +80,9 @@ export default function App() {
   const [showNewCharModal, setShowNewCharModal] = useState(false);
   const [showNewVarModal, setShowNewVarModal] = useState(false);
   const [showNewAssetModal, setShowNewAssetModal] = useState(false);
+  const [showNewProjectModal, setShowNewProjectModal] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [newProjectTemplate, setNewProjectTemplate] = useState<"blank" | "demo">("blank");
   const [recentProjects, setRecentProjects] = useState<Array<{ id: string; title: string; modifiedAt: string; thumbnail?: string; projectData: string }>>([]);
   const [consoleCollapsed, setConsoleCollapsed] = useState<boolean>(true);
 
@@ -175,7 +178,7 @@ export default function App() {
     setActiveViewMode("storyboard");
     setScreen("editor");
     persistRecentProject(migrated);
-    addLog("info", `Loaded: ${migrated.meta.title}`);
+    addLog("info", `Opened project "${migrated.meta.title}"`);
   };
 
   useEffect(() => {
@@ -195,11 +198,11 @@ export default function App() {
     let engine: PixiVisualNovelEngine | null = null;
     try {
       engine = new PixiVisualNovelEngine(container, {
-        onDialogue: (speaker, text) => addLog("info", `[Say] ${speaker}: "${text}"`),
-        onSceneChange: (_, title) => addLog("info", `Scene: ${title}`),
+        onDialogue: (speaker, text) => addLog("info", `${speaker ? speaker + " said" : "Narration"}: "${text}"`),
+        onSceneChange: (_, title) => addLog("info", `Started scene: ${title}`),
         onStateChange: st => { if (!cancelled) setEngineState({ ...st }); },
-        onChoice: (_, opts) => addLog("info", `Choice (${opts.length} options)`),
-        onStoryEnd: () => addLog("info", "Scene ended.")
+        onChoice: (_, opts) => addLog("info", `Presented a choice with ${opts.length} option${opts.length === 1 ? "" : "s"}`),
+        onStoryEnd: () => addLog("info", "Reached the end of the scene.")
       });
       engineRef.current = engine;
 
@@ -233,7 +236,7 @@ export default function App() {
     if (res.success && res.state) {
       setProject({ ...res.state });
     } else {
-      addLog("error", `Command Error: ${res.error}`);
+      addLog("error", `Couldn't apply that change: ${res.error}`);
     }
   };
 
@@ -261,7 +264,7 @@ export default function App() {
     a.download = `${project.meta.title || "story"}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    addLog("info", "Saved.");
+    addLog("info", "Project saved.");
   };
 
   const handleLoadProject = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -273,7 +276,7 @@ export default function App() {
         const migrated = MigrationRunner.migrate(JSON.parse(event.target?.result as string));
         openProject(migrated);
       } catch (err) {
-        addLog("error", `Parse error: ${err}`);
+        addLog("error", `Couldn't open that file: ${err}`);
       }
     };
     reader.readAsText(file);
@@ -282,20 +285,20 @@ export default function App() {
   const handleExportProject = async () => {
     const validation = ProjectExporter.validateForExport(project);
     if (!validation.valid) {
-      addLog("error", `Export validation failed: ${validation.issues.join(', ')}`);
+      addLog("error", `Can't export yet: ${validation.issues.join(', ')}`);
       return;
     }
-    addLog("info", "Preparing desktop export manifest for Windows, macOS, and Linux...");
+    addLog("info", "Preparing your desktop build for Windows, macOS, and Linux...");
     const result = await ProjectExporter.exportDesktopBundle(project, {
       target: 'windows',
       outputDir: './exports',
       projectName: project.meta.title || 'story'
     });
     if (result.success) {
-      addLog("info", `Export successful: ${result.outputPath}`);
-      addLog("info", "Desktop export now stays on one project file for Windows, macOS, and Linux.");
+      addLog("info", `Export finished: ${result.outputPath}`);
+      addLog("info", "Your build is ready — one project file works on Windows, macOS, and Linux.");
     } else {
-      addLog("error", `Export failed: ${result.error}`);
+      addLog("error", `Export didn't finish: ${result.error}`);
     }
   };
 
@@ -368,25 +371,69 @@ export default function App() {
     setShowNewVarModal(false);
   };
 
-  const startNewProject = () => {
+  const submitNewProject = async () => {
+    if (newProjectTemplate === "demo") {
+      try {
+        const res = await fetch("/stories/demo-story.json");
+        if (res.ok) {
+          const migrated = MigrationRunner.migrate(await res.json());
+          migrated.meta.title = newProjectName.trim() || migrated.meta.title || "Demo Visual Novel";
+          openProject(migrated);
+          setShowNewProjectModal(false);
+          setNewProjectName("");
+          return;
+        }
+      } catch (_) {}
+    }
     const empty = createEmptyProject();
+    empty.meta.title = newProjectName.trim() || "Untitled Story";
     setProject(empty);
     setInvoker(new CommandInvoker(empty));
     setSelectedSceneId(null);
     setActiveViewMode("storyboard");
     setScreen("editor");
+    setShowNewProjectModal(false);
+    setNewProjectName("");
   };
 
   const currentScene = selectedSceneId ? project.scenes[selectedSceneId] : null;
   const variableSnapshot = engineState?.variables || buildDefaultVariableState(project);
-  const isFlowGraphView = activeViewMode === "project";
-  const showConsole = isFlowGraphView && !consoleCollapsed;
+  const isAdvancedView = activeViewMode === "graph" || activeViewMode === "project";
+  const showConsole = !consoleCollapsed;
+
+  useEffect(() => {
+    setConsoleCollapsed(!isAdvancedView);
+  }, [activeViewMode, isAdvancedView]);
 
   const inputCls = "w-full bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded px-3 py-1.5 text-xs text-[var(--text-secondary)] focus:outline-none focus:border-[var(--border-focus)]";
   const btnPrimary = "px-4 py-1.5 bg-[var(--bg-card)] hover:bg-[var(--bg-elevated)] border border-[var(--border-default)] font-semibold text-xs text-[var(--text-primary)] rounded transition-colors";
   const btnCancel = "px-3 py-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors";
   const modalWrap = "fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50";
   const modalBox = "bg-[var(--bg-panel)] border border-[var(--border-default)] rounded-xl p-5 max-w-md w-full flex flex-col gap-3.5 shadow-xl";
+
+  const newProjectModal = showNewProjectModal && (
+    <div className={modalWrap}><div className={modalBox}>
+      <h3 className="text-sm font-bold text-[var(--text-primary)]">New Project</h3>
+      <div><label className="block text-[10px] text-[var(--text-muted)] mb-1">Project name</label>
+        <input className={inputCls} value={newProjectName} onChange={e=>setNewProjectName(e.target.value)} placeholder="My Visual Novel" autoFocus/>
+      </div>
+      <div><label className="block text-[10px] text-[var(--text-muted)] mb-1">Starter template</label>
+        <div className="grid grid-cols-2 gap-2">
+          {([["blank","Blank","Start from an empty story."],["demo","One-scene demo","A small sample story to explore."]] as const).map(([value,label,desc]) => (
+            <button key={value} onClick={()=>setNewProjectTemplate(value)}
+              className={`p-3 rounded-lg border text-left transition-colors ${newProjectTemplate===value ? "border-[var(--accent)] bg-[var(--bg-surface)]" : "border-[var(--border-subtle)] hover:border-[var(--border-default)]"}`}>
+              <div className="text-xs font-semibold text-[var(--text-primary)] mb-0.5">{label}</div>
+              <div className="text-[10px] text-[var(--text-muted)]">{desc}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="flex justify-end gap-2 mt-1">
+        <button onClick={()=>setShowNewProjectModal(false)} className={btnCancel}>Cancel</button>
+        <button onClick={submitNewProject} className={btnPrimary}>Create</button>
+      </div>
+    </div></div>
+  );
 
   if (screen === "launcher") {
     return (
@@ -407,9 +454,9 @@ export default function App() {
         <main className="flex-1 overflow-y-auto p-6">
           <div className="max-w-6xl mx-auto space-y-5">
             <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <button onClick={startNewProject} className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-panel)] p-5 text-left hover:bg-[var(--bg-elevated)] transition-colors">
+              <button onClick={() => setShowNewProjectModal(true)} className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-panel)] p-5 text-left hover:bg-[var(--bg-elevated)] transition-colors">
                 <div className="text-sm font-semibold mb-1">New Project</div>
-                <div className="text-xs text-[var(--text-muted)]">Start with a blank story.</div>
+                <div className="text-xs text-[var(--text-muted)]">Start with a blank story or a demo.</div>
               </button>
               <label className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-panel)] p-5 text-left hover:bg-[var(--bg-elevated)] transition-colors cursor-pointer">
                 <div className="text-sm font-semibold mb-1">Open Project</div>
@@ -441,6 +488,7 @@ export default function App() {
             </section>
           </div>
         </main>
+      {newProjectModal}
       </div>
     );
   }
@@ -464,15 +512,19 @@ export default function App() {
         </div>
 
         <div className="flex items-center bg-[var(--bg-surface)] p-0.5 rounded-lg border border-[var(--border-subtle)] gap-0.5">
-          {(["graph","storyboard","script","project"] as const).map((mode, i) => (
+          {([
+            { mode: "storyboard", label: "Storyboard", icon: Layers },
+            { mode: "graph", label: "Scene Graph", icon: Split },
+            { mode: "project", label: "Project Flow", icon: FolderTree },
+            { mode: "script", label: "Script", icon: FileCode },
+          ] as const).map(({ mode, label, icon: Icon }) => (
             <button key={mode} onClick={() => setActiveViewMode(mode)}
               className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all flex items-center gap-1.5 ${
                 activeViewMode === mode
                   ? "bg-[var(--bg-card)] text-[var(--text-primary)] border border-[var(--border-default)] shadow-sm"
                   : "text-[var(--text-muted)] hover:text-[var(--text-secondary)] border border-transparent"
               }`}>
-              {i===0 && <Split size={11}/>}{i===1 && <Layers size={11}/>}{i===2 && <FileCode size={11}/>}{i===3 && <FolderTree size={11}/>}
-              {["Scene Graph","Timeline","Script","Project Flow"][i]}
+              <Icon size={11}/>{label}
             </button>
           ))}
         </div>
@@ -623,9 +675,6 @@ export default function App() {
                 <div className="text-[9px] font-bold uppercase tracking-widest text-[var(--text-ghost)] px-1 mb-1">Presentation</div>
                 <button onClick={() => setShowAddCharacterBlockModal(true)} className="w-full px-2 py-1 rounded-md bg-[var(--bg-card)] border border-[var(--border-subtle)] text-[var(--text-secondary)] flex items-center justify-between mb-0.5 hover:border-[var(--border-default)] hover:text-[var(--text-primary)] transition-all">
                   <span>👤 Show Character</span><Plus size={10} className="text-[var(--text-ghost)]"/>
-                </button>
-                <button onClick={() => setShowNewAssetModal(true)} className="w-full px-2 py-1 rounded-md bg-[var(--bg-card)] border border-[var(--border-subtle)] text-[var(--text-secondary)] flex items-center justify-between mb-0.5 hover:border-[var(--border-default)] hover:text-[var(--text-primary)] transition-all">
-                  <span>🖼️ Show Background</span><Plus size={10} className="text-[var(--text-ghost)]"/>
                 </button>
               </div>
             </div>
@@ -787,8 +836,8 @@ export default function App() {
         {/* ===== RIGHT SIDEBAR ===== */}
         <aside className="w-64 bg-[var(--bg-panel)] border-l border-[var(--border-subtle)] flex flex-col shrink-0">
           <div className="flex border-b border-[var(--border-subtle)] text-[11px]">
-            {(["inspector","variables","conditions","debugger","properties"] as const).map(tab => {
-              const labels: Record<string,string> = { inspector:"Inspector", variables:"Variables", conditions:"Conditions", debugger:"Debugger", properties:`Issues (${problems.length})` };
+            {(["inspector","problems","variables","conditions","debugger"] as const).map(tab => {
+              const labels: Record<string,string> = { inspector:"Inspector", problems:`Problems (${problems.length})`, variables:"Variables", conditions:"Conditions", debugger:"Debugger" };
               return (
                 <button key={tab} onClick={() => setInspectorTab(tab)}
                   className={`flex-1 py-2 text-center transition-colors font-semibold ${
@@ -974,7 +1023,7 @@ export default function App() {
               </div>
             )}
 
-            {inspectorTab === "properties" && (
+            {inspectorTab === "problems" && (
               <div className="space-y-2">
                 <span className="text-[9px] font-bold uppercase tracking-widest text-[var(--text-ghost)] block">Integrity</span>
                 {problems.length === 0 ? (
@@ -1136,6 +1185,8 @@ export default function App() {
           </div>
         </div></div>
       )}
+
+      {newProjectModal}
     </div>
   );
 }

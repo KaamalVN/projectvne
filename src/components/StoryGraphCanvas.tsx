@@ -1,8 +1,7 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ReactFlow,
   Background,
-  Controls,
   Node,
   Edge,
   BackgroundVariant
@@ -17,6 +16,7 @@ import {
   StoryNodeData
 } from './GraphNodes';
 import { GraphMiniMap } from './GraphMiniMap';
+import { CanvasControls } from './CanvasControls';
 import { ProjectIR, ID, StoryBlock, DialogueBlock, ShowCharacterBlock, ChoiceBlock } from '../shared/types';
 
 const nodeTypes = {
@@ -41,6 +41,8 @@ export const StoryGraphCanvas: React.FC<StoryGraphCanvasProps> = ({
   theme,
   onSelectNode
 }) => {
+  const [interactive, setInteractive] = useState(true);
+
   const { nodes, edges } = useMemo(() => {
     const scene = activeSceneId ? project.scenes[activeSceneId] : null;
     if (!scene) {
@@ -318,13 +320,16 @@ export const StoryGraphCanvas: React.FC<StoryGraphCanvasProps> = ({
         fitView
         minZoom={0.2}
         maxZoom={1.8}
+        nodesDraggable={interactive}
+        nodesConnectable={interactive}
+        elementsSelectable={interactive}
         onNodeClick={(_, node) => {
           onSelectNode?.(node.id, node.type || "", node.data);
         }}
         proOptions={{ hideAttribution: true }}
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1.2} color="#3a3a46" />
-        <Controls />
+        <CanvasControls interactive={interactive} setInteractive={setInteractive} />
         <GraphMiniMap />
       </ReactFlow>
     </div>
