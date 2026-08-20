@@ -182,6 +182,25 @@ html, body, #root {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Global Pointer Cursor for all interactive elements */
+button,
+[role="button"],
+input[type="submit"],
+input[type="button"],
+input[type="checkbox"],
+select,
+summary,
+.cursor-pointer,
+.theme-toggle,
+nav span,
+[tabindex="0"] {
+  cursor: pointer !important;
+}
+
+button:disabled {
+  cursor: not-allowed !important;
+}
+
 /* ===================================
    REACT FLOW — THEME-OVERRIDDEN
 =================================== */

@@ -12,9 +12,12 @@
   "app": {
     "windows": [
       {
-        "title": "projectvne",
-        "width": 800,
-        "height": 600
+        "title": "ProjectVNE Studio",
+        "width": 1366,
+        "height": 850,
+        "minWidth": 1024,
+        "minHeight": 680,
+        "center": true
       }
     ],
     "security": {
